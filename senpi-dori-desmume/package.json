@@ -11,6 +11,10 @@
 		"lint": "biome check .",
 		"typecheck": "bunx tsc --noEmit"
 	},
+	"dependencies": {
+		"@sinclair/typebox": "^0.34.41",
+		"ws": "^8.18.3"
+	},
 	"peerDependencies": {
 		"@code-yeongyu/senpi": "*",
 		"@earendil-works/pi-ai": "*",
@@ -21,7 +25,7 @@
 		"@code-yeongyu/senpi": "*",
 		"@earendil-works/pi-ai": "*",
 		"@types/node": "^22.0.0",
-		"@types/ws": "^8.18.1",
+		"@types/ws": "^8.5.0",
 		"typescript": "^5.6.0",
 		"typebox": "*",
 		"vitest": "^4.0.0",
