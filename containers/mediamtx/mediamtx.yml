@@ -1,0 +1,42 @@
+# MediaMTX configuration for dori-hobby
+# Docs: https://github.com/bluenviron/mediamtx
+
+logLevel: info
+logDestinations: [stdout]
+
+# RTSP server (publisher input)
+rtsp: yes
+rtspAddress: :8554
+rtspTransports: [tcp]
+rtspAuthMethods: [basic]
+
+# WebRTC / WHEP (browser output)
+webrtc: yes
+webrtcAddress: :8889
+webrtcAllowOrigin: "*"
+webrtcICEServers2:
+  - url: stun:stun.l.google.com:19302
+# Local dev only — overrideable in prod
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: :8189
+
+# HTTP API (for recording control, path listing, health)
+api: yes
+apiAddress: :9996
+
+# HLS — disabled (we use WebRTC for low latency)
+hls: no
+rtmp: no
+srt: no
+
+# Path: dori (the emulator publishes here)
+paths:
+  dori:
+    source: publisher
+    # Recording: on-demand via API, fragmented MP4
+    record: no    # disabled by default; turn on via API when an active session starts
+    recordPath: /recordings/dori_%Y-%m-%d_%H-%M-%S-%f
+    recordFormat: fmp4
+    recordPartDuration: 1s
+    recordSegmentDuration: 1h
+    recordDeleteAfter: 168h    # auto-delete after 7 days
