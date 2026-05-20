@@ -30,14 +30,83 @@ const firstLine = (value: Uint8Array): string | undefined => {
 	return candidate;
 };
 
+const matchInt = (haystack: string, pattern: RegExp): number | undefined => {
+	const m = pattern.exec(haystack);
+	if (m === null) return undefined;
+	const captured = m[1];
+	if (captured === undefined) return undefined;
+	const value = Number.parseInt(captured, 10);
+	if (Number.isNaN(value)) return undefined;
+	return value;
+};
+
+interface CanvasGeometry {
+	readonly x: number;
+	readonly y: number;
+	readonly width: number;
+	readonly height: number;
+}
+
+// DeSmuME 0.9.11 GTK draws a menu + toolbar + thin top border above the
+// game canvas inside the toplevel window. Measured empirically by reading
+// pixel rows of root captures: the actual DS rendering starts ~104 px
+// below the toplevel's upper edge. We subtract this offset from height
+// (and add it to y) so callers get JUST the two DS screens.
+const GTK_CHROME_TOP_PX = 104;
+// And ~12 px below the canvas for the status bar.
+const GTK_CHROME_BOTTOM_PX = 12;
+
 export class DesmumeDriver {
 	private windowId: string | undefined;
+	private cachedGeometry: CanvasGeometry | undefined;
 	private readonly runner: CommandRunner;
 	private readonly sleep: SleepFunction;
 
 	public constructor(runner: CommandRunner, sleep: SleepFunction = defaultSleep) {
 		this.runner = runner;
 		this.sleep = sleep;
+	}
+
+	/**
+	 * Resolve the current canvas position via `xwininfo -id`.
+	 *
+	 * `xdotool getwindowgeometry --shell` returns coordinates that include
+	 * GTK frame offset adjustments — they're NOT the true root-window
+	 * absolute position. Cropping with those numbers slices through the
+	 * menu bar.
+	 *
+	 * `xwininfo` exposes "Absolute upper-left X/Y" which IS the right
+	 * value to pass to `import -window root` + crop and ffmpeg's
+	 * `:99.0+X,Y` offset.
+	 */
+	private async getCanvasGeometry(): Promise<CanvasGeometry> {
+		if (this.cachedGeometry !== undefined) {
+			return this.cachedGeometry;
+		}
+		const windowId = await this.findWindow();
+		const result = await this.runner.run("xwininfo", ["-id", windowId]);
+		if (result.code !== 0) {
+			throw new Error("xwininfo failed");
+		}
+		const text = new TextDecoder().decode(result.stdout);
+		const absX = matchInt(text, /Absolute upper-left X:\s+(-?\d+)/);
+		const absY = matchInt(text, /Absolute upper-left Y:\s+(-?\d+)/);
+		const width = matchInt(text, /Width:\s+(\d+)/);
+		const height = matchInt(text, /Height:\s+(\d+)/);
+		if (absX === undefined || absY === undefined || width === undefined || height === undefined) {
+			throw new Error("incomplete xwininfo output");
+		}
+		// Trim the GTK menu/toolbar (top) and status bar (bottom) so the
+		// reported canvas is just the two DS screens.
+		const trimmedHeight = Math.max(1, height - GTK_CHROME_TOP_PX - GTK_CHROME_BOTTOM_PX);
+		const geometry: CanvasGeometry = {
+			x: absX,
+			y: absY + GTK_CHROME_TOP_PX,
+			width,
+			height: trimmedHeight,
+		};
+		this.cachedGeometry = geometry;
+		return geometry;
 	}
 
 	public async findWindow(): Promise<string> {
@@ -75,9 +144,10 @@ export class DesmumeDriver {
 	 * X events for game-button presses.
 	 */
 	private async focusCanvas(windowId: string): Promise<void> {
-		// Canvas is roughly 256x490 in its top-level frame at 388,253 on root.
-		// Place mouse near the center of the canvas (absolute root coords).
-		await this.runner.run("xdotool", ["mousemove", "517", "500"]);
+		const geometry = await this.getCanvasGeometry();
+		const centerX = geometry.x + Math.floor(geometry.width / 2);
+		const centerY = geometry.y + Math.floor(geometry.height / 2);
+		await this.runner.run("xdotool", ["mousemove", String(centerX), String(centerY)]);
 		await this.runner.run("xdotool", ["windowactivate", "--sync", windowId]);
 		await this.sleep(50);
 	}
@@ -108,31 +178,50 @@ export class DesmumeDriver {
 		}
 
 		const windowId = await this.findWindow();
-		// Canvas is 256x490 inside the frame at 388,253. The lower DS
-		// half lives at canvas-local y=[260..490], width 256. Convert
-		// DS-touch coords to absolute root coords (no --window, so XTEST
-		// click goes through the same synthetic-filter-free path as keys).
-		const rootX = 389 + x;
-		const rootY = 273 + 260 + y;
 		await this.focusCanvas(windowId);
+		// Canvas-local layout (relative to the DeSmuME drawing area):
+		//   top DS screen:    y = 0..(canvas_h*192/(192+192+gap))      (view only)
+		//   bottom DS screen: y starts at roughly canvas_h * 192/384
+		// The default DeSmuME 0.9.11 canvas at 1x is 256x490 with a small
+		// gap between screens. Half-and-half is a good-enough approximation
+		// for clicking the bottom screen.
+		const geometry = await this.getCanvasGeometry();
+		const halfH = Math.floor(geometry.height / 2);
+		const rootX = geometry.x + x;
+		const rootY = geometry.y + halfH + y;
 		await this.runner.run("xdotool", ["mousemove", String(rootX), String(rootY)]);
 		await this.runner.run("xdotool", ["click", "1"]);
 	}
 
-	public async captureScreen(): Promise<{ readonly base64: string; readonly width: number; readonly height: number }> {
-		// `import -window <child>` regularly fails with
-		// "Resource temporarily unavailable" on Xvfb because GTK keeps the
-		// canvas backing pixmap busy. Capture the root window — DeSmuME is
-		// the only visible app, so the framing is stable.
-		const result = await this.runner.run("import", ["-window", "root", "png:-"]);
+	public async captureScreen(): Promise<{
+		readonly base64: string;
+		readonly width: number;
+		readonly height: number;
+	}> {
+		// Capture the root window then crop to the game canvas in one shell
+		// pipeline. `import -window <child>` intermittently fails with
+		// "Resource temporarily unavailable" because GTK keeps the canvas
+		// backing pixmap busy. Cropping after a root capture is bulletproof.
+		//
+		// The canvas position is dynamic (entrypoint pins it to ~(10,10) but
+		// the user might have moved it), so we re-resolve geometry every
+		// time. Cheap: getwindowgeometry is microseconds.
+		const geometry = await this.getCanvasGeometry();
+		const cropSpec = `${geometry.width}x${geometry.height}+${geometry.x}+${geometry.y}`;
+		// ImageMagick 6.x (Debian default) uses `convert`; v7+ uses `magick`.
+		// Debian bookworm ships v6.9, so `convert` is what we have.
+		const result = await this.runner.run("sh", [
+			"-c",
+			`import -window root miff:- | convert miff:- -crop ${cropSpec} +repage png:-`,
+		]);
 		if (result.code !== 0) {
 			throw new Error("screen capture failed");
 		}
 
 		return {
 			base64: Buffer.from(result.stdout).toString("base64"),
-			width: 1024,
-			height: 768,
+			width: geometry.width,
+			height: geometry.height,
 		};
 	}
 }

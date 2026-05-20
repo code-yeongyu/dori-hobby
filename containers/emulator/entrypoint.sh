@@ -24,8 +24,12 @@ cleanup() {
 trap cleanup EXIT TERM INT
 
 # --- 1. Start Xvfb ---
+# 1024x900 — the DeSmuME GTK toplevel + decoration is ~258x515 placed by
+# openbox roughly around (390, 293), which means it can run off the
+# bottom of a 768-tall Xvfb. Bumping height gives ffmpeg's x11grab a safe
+# margin to crop the canvas without "outside the screen size" errors.
 echo "[entrypoint] starting Xvfb on :${DISPLAY_NUM}..."
-Xvfb ":${DISPLAY_NUM}" -screen 0 1024x768x24 -ac &
+Xvfb ":${DISPLAY_NUM}" -screen 0 1024x900x24 -ac &
 XVFB_PID=$!
 
 # Wait for display
@@ -61,11 +65,17 @@ else
 		"--3d-engine=1"        # internal software rasterizer (no GL needed)
 		"--save-type=0"        # autodetect savetype
 	)
-	# Pre-stage cheats into DeSmuME's XDG config path so the user can enable
-	# them via UI / Tools menu without further work.
+	# DeSmuME 0.9.11 auto-loads `<rom>.dct` from the SAME dir as the ROM
+	# at boot. We drop ours there. The Serial header in the .dct file MUST
+	# match the loaded ROM's gamecode + CRC32 (we set IRAO-B552501C for
+	# Pokemon White US, see cheats/pokemon-white-us.dct).
 	if [ -f "${CHEATS_PATH}" ]; then
-		mkdir -p "${HOME}/.config/desmume/cheats" 2>/dev/null || true
-		cp -f "${CHEATS_PATH}" "${HOME}/.config/desmume/cheats/" 2>/dev/null || true
+		ROM_DIR="$(dirname "${ROM_PATH}")"
+		ROM_BASE="$(basename "${ROM_PATH}" .nds)"
+		# Copy (not symlink) so DeSmuME can read it even if the host bind
+		# mount drops symlink permissions.
+		cp -f "${CHEATS_PATH}" "${ROM_DIR}/${ROM_BASE}.dct" 2>/dev/null || true
+		echo "[entrypoint] cheats staged at ${ROM_DIR}/${ROM_BASE}.dct"
 	fi
 	# Launch openbox with sloppy/under-mouse focus so xdotool's XTEST keys
 	# (which need a focused window) land on whichever window the mouse is
@@ -102,6 +112,21 @@ XML
 			break
 		fi
 	done
+
+	# openbox places the toplevel wherever it likes, which sometimes puts
+	# the game canvas below the Xvfb screen bottom and crashes our ffmpeg
+	# crop. Force the toplevel frame to (10, 10) so the canvas always
+	# falls inside the 1024x900 root.
+	sleep 1
+	GAME_WIN="$(xdotool search --onlyvisible --name "fps" 2>/dev/null | head -1 || true)"
+	if [ -n "${GAME_WIN}" ]; then
+		# Walk up to the top-level frame so the WHOLE window moves, not just
+		# the canvas child. xdotool windowmove on a child does the right
+		# thing in practice (openbox reroutes to the toplevel), but pinning
+		# 10,10 here makes the geometry deterministic regardless.
+		xdotool windowmove "${GAME_WIN}" 10 10 2>/dev/null || true
+		echo "[entrypoint] forced DeSmuME window to (10, 10)"
+	fi
 fi
 
 # --- 4. Wait for mediamtx + start ffmpeg RTSP push ---
@@ -120,12 +145,68 @@ for i in $(seq 1 30); do
 	fi
 done
 
+# ffmpeg input geometry — cropped to the DeSmuME game canvas so the stream
+# is just the DS screens, not the Xvfb wallpaper. We resolve the canvas
+# position dynamically because openbox decides where to place the window
+# at runtime.
+#
+# Fallback if window-not-found: capture the full 1024x768 root so the user
+# at least sees SOMETHING in the stream.
+resolve_capture_geometry() {
+	local win
+	# Give DeSmuME's GTK a beat to finish laying out the toplevel + canvas.
+	sleep 1
+	win="$(DISPLAY=":${DISPLAY_NUM}" xdotool search --onlyvisible --name "fps" 2>/dev/null | head -1 || true)"
+	if [ -z "${win}" ]; then
+		echo "[entrypoint] WARNING: DeSmuME window not found for ffmpeg crop — falling back to full Xvfb capture" >&2
+		echo "1024 768 0 0"
+		return
+	fi
+	# Use xwininfo (NOT xdotool getwindowgeometry) — the former exposes the
+	# true root-window absolute upper-left, the latter returns coordinates
+	# offset by GTK frame metrics that slice through the menu bar.
+	local raw
+	raw="$(DISPLAY=":${DISPLAY_NUM}" xwininfo -id "${win}" 2>/dev/null || true)"
+	if [ -z "${raw}" ]; then
+		echo "[entrypoint] WARNING: xwininfo failed — using full Xvfb capture" >&2
+		echo "1024 768 0 0"
+		return
+	fi
+	local x y w h
+	x=$(echo "${raw}" | awk '/Absolute upper-left X:/ {print $NF}')
+	y=$(echo "${raw}" | awk '/Absolute upper-left Y:/ {print $NF}')
+	w=$(echo "${raw}" | awk '/^  Width:/ {print $NF}')
+	h=$(echo "${raw}" | awk '/^  Height:/ {print $NF}')
+	# Skip the GTK menu/toolbar (top) and the status bar (bottom) so the
+	# RTSP feed shows JUST the two DS screens. These offsets are matched
+	# to the input-bridge driver's GTK_CHROME_TOP_PX / BOTTOM_PX constants.
+	local CHROME_TOP=104
+	local CHROME_BOTTOM=12
+	y=$(( y + CHROME_TOP ))
+	h=$(( h - CHROME_TOP - CHROME_BOTTOM ))
+	# H.264 requires even dimensions. Pad up by 1 px when odd.
+	w=$(( w + (w % 2) ))
+	h=$(( h + (h % 2) ))
+	echo "${w} ${h} ${x} ${y}"
+}
+
+read -r CAP_W CAP_H CAP_X CAP_Y < <(resolve_capture_geometry)
+echo "[entrypoint] ffmpeg capture geometry: ${CAP_W}x${CAP_H}+${CAP_X},${CAP_Y}"
+
+# Scale 2x with lanczos for crisp pixel-art upscaling. Padding (if any) is
+# absorbed by the encoder's stride; we don't add letterboxing because the
+# DS aspect (≈1:1.91 stacked) is what we want the viewer to see at-1.
+OUT_W=$(( CAP_W * 2 ))
+OUT_H=$(( CAP_H * 2 ))
+
 (
 	while true; do
-		echo "[entrypoint] starting ffmpeg → ${MEDIAMTX_RTSP_URL}"
+		echo "[entrypoint] starting ffmpeg → ${MEDIAMTX_RTSP_URL} (cap ${CAP_W}x${CAP_H}@${CAP_X},${CAP_Y} → ${OUT_W}x${OUT_H})"
 		ffmpeg -hide_banner -loglevel warning \
-			-f x11grab -framerate 30 -video_size 1024x768 -i ":${DISPLAY_NUM}" \
+			-f x11grab -framerate 30 -video_size "${CAP_W}x${CAP_H}" \
+			-i ":${DISPLAY_NUM}.0+${CAP_X},${CAP_Y}" \
 			-an \
+			-vf "scale=${OUT_W}:${OUT_H}:flags=lanczos" \
 			-c:v libx264 -preset ultrafast -tune zerolatency -profile:v baseline \
 			-pix_fmt yuv420p -g 30 -keyint_min 30 -sc_threshold 0 \
 			-b:v 2M -maxrate 2M -bufsize 4M \

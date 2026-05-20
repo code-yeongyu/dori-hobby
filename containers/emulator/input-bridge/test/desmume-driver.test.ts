@@ -31,6 +31,27 @@ class MockRunner implements CommandRunner {
 
 const SEARCH_ARGS = ["search", "--onlyvisible", "--name", "fps"] as const;
 
+// Standard mock for xwininfo output. The driver parses
+// `Absolute upper-left X/Y` and `Width/Height` and ignores the rest.
+// NOTE: the driver TRIMS 104px from the top and 12px from the bottom of
+// the returned height to skip the GTK menu/toolbar/status bar, so a
+// 256x490 toplevel becomes a 256x374 reported canvas.
+const geometryOutput = (x: number, y: number, w: number, h: number): string => {
+	return [
+		`xwininfo: Window id: 0x123 "DeSmuME - 60fps, 0 skipped, draw: 60fps"`,
+		``,
+		`  Absolute upper-left X:  ${x}`,
+		`  Absolute upper-left Y:  ${y}`,
+		`  Relative upper-left X:  0`,
+		`  Relative upper-left Y:  0`,
+		`  Width: ${w}`,
+		`  Height: ${h}`,
+		`  Depth: 24`,
+		`  Map State: IsViewable`,
+		``,
+	].join("\n");
+};
+
 describe("DesmumeDriver", () => {
 	it("retries window lookup and caches window id", async () => {
 		const runner = new MockRunner([
@@ -50,8 +71,19 @@ describe("DesmumeDriver", () => {
 		expect(runner.calls).toHaveLength(2);
 	});
 
+	// xwininfo input (10, 10, 256, 490) → after driver chrome trim:
+	//   canvas at (10, 10+104=114), 256x(490-104-12=374)
+	// Canvas center: (10 + 128, 114 + 187) = (138, 301)
+	// Bottom half (within trimmed canvas) starts at canvas_y + 187 = 301.
 	it("presses a button with tap semantics (XTEST + sloppy focus)", async () => {
-		const runner = new MockRunner([{ stdout: textBytes("100\n"), stderr: "", code: 0 }]);
+		const runner = new MockRunner([
+			{ stdout: textBytes("100\n"), stderr: "", code: 0 },
+			{
+				stdout: textBytes(geometryOutput(10, 10, 256, 490)),
+				stderr: "",
+				code: 0,
+			},
+		]);
 		const sleeps: number[] = [];
 		const driver = new DesmumeDriver(runner, async (ms: number) => {
 			sleeps.push(ms);
@@ -61,7 +93,12 @@ describe("DesmumeDriver", () => {
 
 		expect(runner.calls).toEqual([
 			{ cmd: "xdotool", args: [...SEARCH_ARGS], input: undefined },
-			{ cmd: "xdotool", args: ["mousemove", "517", "500"], input: undefined },
+			{
+				cmd: "xwininfo",
+				args: ["-id", "100"],
+				input: undefined,
+			},
+			{ cmd: "xdotool", args: ["mousemove", "138", "301"], input: undefined },
 			{ cmd: "xdotool", args: ["windowactivate", "--sync", "100"], input: undefined },
 			{ cmd: "xdotool", args: ["key", "x"], input: undefined },
 		]);
@@ -69,7 +106,14 @@ describe("DesmumeDriver", () => {
 	});
 
 	it("presses a button with hold semantics", async () => {
-		const runner = new MockRunner([{ stdout: textBytes("100\n"), stderr: "", code: 0 }]);
+		const runner = new MockRunner([
+			{ stdout: textBytes("100\n"), stderr: "", code: 0 },
+			{
+				stdout: textBytes(geometryOutput(10, 10, 256, 490)),
+				stderr: "",
+				code: 0,
+			},
+		]);
 		const sleeps: number[] = [];
 		const driver = new DesmumeDriver(runner, async (ms: number) => {
 			sleeps.push(ms);
@@ -80,7 +124,12 @@ describe("DesmumeDriver", () => {
 		expect(sleeps).toEqual([50, 500]);
 		expect(runner.calls).toEqual([
 			{ cmd: "xdotool", args: [...SEARCH_ARGS], input: undefined },
-			{ cmd: "xdotool", args: ["mousemove", "517", "500"], input: undefined },
+			{
+				cmd: "xwininfo",
+				args: ["-id", "100"],
+				input: undefined,
+			},
+			{ cmd: "xdotool", args: ["mousemove", "138", "301"], input: undefined },
 			{ cmd: "xdotool", args: ["windowactivate", "--sync", "100"], input: undefined },
 			{ cmd: "xdotool", args: ["keydown", "z"], input: undefined },
 			{ cmd: "xdotool", args: ["keyup", "z"], input: undefined },
@@ -88,7 +137,14 @@ describe("DesmumeDriver", () => {
 	});
 
 	it("maps touch coordinates into root coordinates via XTEST", async () => {
-		const runner = new MockRunner([{ stdout: textBytes("777\n"), stderr: "", code: 0 }]);
+		const runner = new MockRunner([
+			{ stdout: textBytes("777\n"), stderr: "", code: 0 },
+			{
+				stdout: textBytes(geometryOutput(10, 10, 256, 490)),
+				stderr: "",
+				code: 0,
+			},
+		]);
 		const sleeps: number[] = [];
 		const driver = new DesmumeDriver(runner, async (ms: number) => {
 			sleeps.push(ms);
@@ -96,14 +152,21 @@ describe("DesmumeDriver", () => {
 
 		await driver.touch(255, 191);
 
-		// Expected mapping:
-		//   rootX = 389 + 255 = 644
-		//   rootY = 273 + 260 + 191 = 724
+		// Trimmed canvas at (10, 114), 256x374. Half-height = 187.
+		// Touch (255, 191):
+		//   rootX = 10 + 255 = 265
+		//   rootY = 114 + 187 + 191 = 492
+		// Mouse hover center: (10 + 128, 114 + 187) = (138, 301)
 		expect(runner.calls).toEqual([
 			{ cmd: "xdotool", args: [...SEARCH_ARGS], input: undefined },
-			{ cmd: "xdotool", args: ["mousemove", "517", "500"], input: undefined },
+			{
+				cmd: "xwininfo",
+				args: ["-id", "777"],
+				input: undefined,
+			},
+			{ cmd: "xdotool", args: ["mousemove", "138", "301"], input: undefined },
 			{ cmd: "xdotool", args: ["windowactivate", "--sync", "777"], input: undefined },
-			{ cmd: "xdotool", args: ["mousemove", "644", "724"], input: undefined },
+			{ cmd: "xdotool", args: ["mousemove", "265", "492"], input: undefined },
 			{ cmd: "xdotool", args: ["click", "1"], input: undefined },
 		]);
 		expect(sleeps).toEqual([50]);
@@ -118,16 +181,37 @@ describe("DesmumeDriver", () => {
 		await expect(driver.touch(0, 192)).rejects.toThrow("y out of range");
 	});
 
-	it("captures the root window as base64 PNG", async () => {
-		const runner = new MockRunner([{ stdout: Uint8Array.of(137, 80, 78, 71), stderr: "", code: 0 }]);
+	it("captures the cropped game canvas as base64 PNG", async () => {
+		const runner = new MockRunner([
+			{ stdout: textBytes("555\n"), stderr: "", code: 0 },
+			{
+				stdout: textBytes(geometryOutput(10, 10, 256, 490)),
+				stderr: "",
+				code: 0,
+			},
+			{ stdout: Uint8Array.of(137, 80, 78, 71), stderr: "", code: 0 },
+		]);
 		const driver = new DesmumeDriver(runner, async () => {});
 
+		// Trimmed canvas: x=10, y=10+104=114, w=256, h=490-104-12=374.
 		await expect(driver.captureScreen()).resolves.toEqual({
 			base64: "iVBORw==",
-			width: 1024,
-			height: 768,
+			width: 256,
+			height: 374,
 		});
-		expect(runner.calls).toEqual([{ cmd: "import", args: ["-window", "root", "png:-"], input: undefined }]);
+		expect(runner.calls).toEqual([
+			{ cmd: "xdotool", args: [...SEARCH_ARGS], input: undefined },
+			{
+				cmd: "xwininfo",
+				args: ["-id", "555"],
+				input: undefined,
+			},
+			{
+				cmd: "sh",
+				args: ["-c", "import -window root miff:- | convert miff:- -crop 256x374+10+114 +repage png:-"],
+				input: undefined,
+			},
+		]);
 	});
 
 	it("throws when the DeSmuME window cannot be found", async () => {

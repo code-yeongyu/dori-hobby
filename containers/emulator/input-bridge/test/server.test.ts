@@ -37,6 +37,25 @@ const setup = (runner: CommandRunner, sleep?: (ms: number) => Promise<void>) => 
 	return { driver, app: buildApp(driver) };
 };
 
+// Default geometry mock for xwininfo — canvas at absolute (10, 10) 256x490.
+// Canvas center = (138, 255), bottom half-height = 245.
+const geometryResult = {
+	stdout: new TextEncoder().encode(
+		[
+			'xwininfo: Window id: 0x123 "DeSmuME - 60fps, 0 skipped, draw: 60fps"',
+			"",
+			"  Absolute upper-left X:  10",
+			"  Absolute upper-left Y:  10",
+			"  Width: 256",
+			"  Height: 490",
+			"  Map State: IsViewable",
+			"",
+		].join("\n"),
+	),
+	stderr: "",
+	code: 0,
+};
+
 describe("input-bridge HTTP server", () => {
 	it("responds with health status", async () => {
 		const runner = new MockRunner([]);
@@ -50,7 +69,7 @@ describe("input-bridge HTTP server", () => {
 
 	it("presses each DS button via /button", async () => {
 		for (const button of NDS_BUTTONS) {
-			const runner = new MockRunner([{ stdout: textBytes("9001\n"), stderr: "", code: 0 }]);
+			const runner = new MockRunner([{ stdout: textBytes("9001\n"), stderr: "", code: 0 }, geometryResult]);
 			const { app } = setup(runner, async () => {});
 
 			const response = await app.request("/button", {
@@ -63,7 +82,11 @@ describe("input-bridge HTTP server", () => {
 			await expect(response.json()).resolves.toEqual({ ok: true });
 			expect(runner.calls).toEqual([
 				{ cmd: "xdotool", args: ["search", "--onlyvisible", "--name", "fps"] },
-				{ cmd: "xdotool", args: ["mousemove", "517", "500"] },
+				{
+					cmd: "xwininfo",
+					args: ["-id", "9001"],
+				},
+				{ cmd: "xdotool", args: ["mousemove", "138", "301"] },
 				{ cmd: "xdotool", args: ["windowactivate", "--sync", "9001"] },
 				{ cmd: "xdotool", args: ["key", BUTTON_KEY_MAP[button]] },
 			]);
@@ -89,7 +112,7 @@ describe("input-bridge HTTP server", () => {
 			{ x: 128, y: 96 },
 			{ x: 255, y: 191 },
 		]) {
-			const runner = new MockRunner([{ stdout: textBytes("300\n"), stderr: "", code: 0 }]);
+			const runner = new MockRunner([{ stdout: textBytes("300\n"), stderr: "", code: 0 }, geometryResult]);
 			const { app } = setup(runner, async () => {});
 
 			const response = await app.request("/touch", {
@@ -124,18 +147,26 @@ describe("input-bridge HTTP server", () => {
 		}
 	});
 
-	it("captures screenshots via /screenshot (root window capture)", async () => {
-		const runner = new MockRunner([{ stdout: Uint8Array.of(137, 80, 78, 71), stderr: "", code: 0 }]);
+	it("captures the cropped game canvas via /screenshot", async () => {
+		const runner = new MockRunner([
+			{ stdout: textBytes("300\n"), stderr: "", code: 0 },
+			geometryResult,
+			{ stdout: Uint8Array.of(137, 80, 78, 71), stderr: "", code: 0 },
+		]);
 		const { app } = setup(runner, async () => {});
 
 		const response = await app.request("/screenshot");
 
 		expect(response.status).toBe(200);
-		await expect(response.json()).resolves.toEqual({ image: "iVBORw==", width: 1024, height: 768 });
+		await expect(response.json()).resolves.toEqual({
+			image: "iVBORw==",
+			width: 256,
+			height: 374,
+		});
 	});
 
 	it("uses hold_ms as keydown + keyup flow", async () => {
-		const runner = new MockRunner([{ stdout: textBytes("300\n"), stderr: "", code: 0 }]);
+		const runner = new MockRunner([{ stdout: textBytes("300\n"), stderr: "", code: 0 }, geometryResult]);
 		const sleeps: number[] = [];
 		const { app } = setup(runner, async (ms: number) => {
 			sleeps.push(ms);
@@ -152,7 +183,8 @@ describe("input-bridge HTTP server", () => {
 		expect(sleeps).toEqual([50, 500]);
 		expect(runner.calls).toEqual([
 			{ cmd: "xdotool", args: ["search", "--onlyvisible", "--name", "fps"] },
-			{ cmd: "xdotool", args: ["mousemove", "517", "500"] },
+			{ cmd: "xwininfo", args: ["-id", "300"] },
+			{ cmd: "xdotool", args: ["mousemove", "138", "301"] },
 			{ cmd: "xdotool", args: ["windowactivate", "--sync", "300"] },
 			{ cmd: "xdotool", args: ["keydown", "x"] },
 			{ cmd: "xdotool", args: ["keyup", "x"] },
