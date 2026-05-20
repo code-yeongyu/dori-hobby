@@ -8,6 +8,9 @@ DISPLAY_NUM="${DISPLAY_NUM:-99}"
 export DISPLAY=":${DISPLAY_NUM}"
 
 cleanup() {
+	if [ -n "${FFMPEG_PID:-}" ] && ps -p "${FFMPEG_PID}" >/dev/null 2>&1; then
+		kill "${FFMPEG_PID}" || true
+	fi
 	if [ -n "${DESMUME_PID:-}" ] && ps -p "${DESMUME_PID}" >/dev/null 2>&1; then
 		kill "${DESMUME_PID}" || true
 	fi
@@ -68,9 +71,37 @@ else
 	done
 fi
 
-# --- 4. Wait for mediamtx (T12 finalizes this) ---
-# Placeholder for T12. T12 owns the ffmpeg → RTSP push command.
-echo "[entrypoint] (ffmpeg streaming will be added by T12 — skipping for now)"
+# --- 4. Wait for mediamtx + start ffmpeg RTSP push ---
+MEDIAMTX_RTSP_URL="${MEDIAMTX_RTSP_URL:-rtsp://mediamtx:8554/dori}"
+MEDIAMTX_HEALTH_URL="${MEDIAMTX_HEALTH_URL:-http://mediamtx:9996/v3/paths/list}"
+
+echo "[entrypoint] waiting for mediamtx at ${MEDIAMTX_HEALTH_URL}..."
+for i in $(seq 1 30); do
+	if curl -fsS --max-time 1 "${MEDIAMTX_HEALTH_URL}" >/dev/null 2>&1; then
+		echo "[entrypoint] mediamtx ready"
+		break
+	fi
+	sleep 1
+	if [ "${i}" = "30" ]; then
+		echo "[entrypoint] WARNING: mediamtx not detected — ffmpeg will retry"
+	fi
+done
+
+(
+	while true; do
+		echo "[entrypoint] starting ffmpeg → ${MEDIAMTX_RTSP_URL}"
+		ffmpeg -hide_banner -loglevel warning \
+			-f x11grab -framerate 30 -video_size 1024x768 -i ":${DISPLAY_NUM}" \
+			-an \
+			-c:v libx264 -preset ultrafast -tune zerolatency -profile:v baseline \
+			-pix_fmt yuv420p -g 30 -keyint_min 30 -sc_threshold 0 \
+			-b:v 2M -maxrate 2M -bufsize 4M \
+			-f rtsp -rtsp_transport tcp "${MEDIAMTX_RTSP_URL}" || true
+		echo "[entrypoint] ffmpeg exited — restarting in 5s"
+		sleep 5
+	done
+) &
+FFMPEG_PID=$!
 
 # --- 5. Start input-bridge ---
 echo "[entrypoint] starting input-bridge on :7878..."
