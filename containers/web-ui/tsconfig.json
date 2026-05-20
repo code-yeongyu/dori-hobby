@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "types": ["bun-types", "vitest/globals"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "e2e/**/*.ts"]
 }

@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { SystemStatus } from "../shared/types.js";
 import { ChatPanel } from "./components/ChatPanel.js";
 import { StatusBar } from "./components/StatusBar.js";
 import { StreamViewer } from "./components/StreamViewer.js";
+
+type StreamState = "connecting" | "live" | "disconnected";
+type AgentState = "running" | "idle" | "disconnected";
 
 export const App = (): JSX.Element => {
   const [status, setStatus] = useState<SystemStatus>({
@@ -12,26 +15,26 @@ export const App = (): JSX.Element => {
     agent: "disconnected",
   });
 
+  const handleStreamStatus = useCallback((stream: StreamState): void => {
+    setStatus((previous) => {
+      return { ...previous, stream };
+    });
+  }, []);
+
+  const handleAgentStatus = useCallback((agent: AgentState): void => {
+    setStatus((previous) => {
+      return { ...previous, agent };
+    });
+  }, []);
+
   return (
     <div className="app-grid">
       <main className="stream-cell">
-        <StreamViewer
-          onStreamStatus={(stream) => {
-            setStatus((previous) => {
-              return { ...previous, stream };
-            });
-          }}
-        />
+        <StreamViewer onStreamStatus={handleStreamStatus} />
       </main>
 
       <aside className="chat-cell">
-        <ChatPanel
-          onAgentStatus={(agent) => {
-            setStatus((previous) => {
-              return { ...previous, agent };
-            });
-          }}
-        />
+        <ChatPanel onAgentStatus={handleAgentStatus} />
       </aside>
 
       <footer className="status-cell">

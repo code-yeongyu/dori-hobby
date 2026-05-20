@@ -9,7 +9,9 @@
     "build:client": "bun run scripts/build-client.ts",
     "test": "vitest run",
     "lint": "biome check .",
-    "typecheck": "bunx tsc --noEmit"
+    "typecheck": "bunx tsc --noEmit",
+    "test:e2e": "playwright test -c e2e/playwright.config.ts",
+    "test:e2e:install": "playwright install chromium"
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.49",
@@ -19,6 +21,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.0",
     "@biomejs/biome": "^2.4.0",
     "@types/bun": "latest",
     "@types/react": "^18.3.0",
