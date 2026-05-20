@@ -28,6 +28,12 @@ trap cleanup EXIT TERM INT
 # openbox roughly around (390, 293), which means it can run off the
 # bottom of a 768-tall Xvfb. Bumping height gives ffmpeg's x11grab a safe
 # margin to crop the canvas without "outside the screen size" errors.
+# Clear any stale X server lock so `docker restart` doesn't leave us with
+# "Server is already active for display 99" — that lock survives the
+# previous Xvfb exit when the container is stopped without a clean
+# shutdown.
+echo "[entrypoint] clearing stale X locks if any..."
+rm -f "/tmp/.X${DISPLAY_NUM}-lock" "/tmp/.X11-unix/X${DISPLAY_NUM}" 2>/dev/null || true
 echo "[entrypoint] starting Xvfb on :${DISPLAY_NUM}..."
 Xvfb ":${DISPLAY_NUM}" -screen 0 1024x900x24 -ac &
 XVFB_PID=$!
@@ -179,9 +185,11 @@ resolve_capture_geometry() {
 	h=$(echo "${raw}" | awk '/^  Height:/ {print $NF}')
 	# Skip the GTK menu/toolbar (top) and the status bar (bottom) so the
 	# RTSP feed shows JUST the two DS screens. These offsets are matched
-	# to the input-bridge driver's GTK_CHROME_TOP_PX / BOTTOM_PX constants.
-	local CHROME_TOP=104
-	local CHROME_BOTTOM=12
+	# to the input-bridge driver's GTK_CHROME_TOP_PX / BOTTOM_PX constants
+	# (measured empirically: window rows 0..84 menu+toolbar, 85..276 top
+	# screen, 277..468 bottom screen, 470..489 status bar).
+	local CHROME_TOP=85
+	local CHROME_BOTTOM=21
 	y=$(( y + CHROME_TOP ))
 	h=$(( h - CHROME_TOP - CHROME_BOTTOM ))
 	# H.264 requires even dimensions. Pad up by 1 px when odd.

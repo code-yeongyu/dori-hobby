@@ -33,9 +33,9 @@ const SEARCH_ARGS = ["search", "--onlyvisible", "--name", "fps"] as const;
 
 // Standard mock for xwininfo output. The driver parses
 // `Absolute upper-left X/Y` and `Width/Height` and ignores the rest.
-// NOTE: the driver TRIMS 104px from the top and 12px from the bottom of
+// NOTE: the driver TRIMS 85px from the top and 21px from the bottom of
 // the returned height to skip the GTK menu/toolbar/status bar, so a
-// 256x490 toplevel becomes a 256x374 reported canvas.
+// 256x490 toplevel becomes a 256x384 reported canvas (192+192 DS screens).
 const geometryOutput = (x: number, y: number, w: number, h: number): string => {
 	return [
 		`xwininfo: Window id: 0x123 "DeSmuME - 60fps, 0 skipped, draw: 60fps"`,
@@ -72,9 +72,9 @@ describe("DesmumeDriver", () => {
 	});
 
 	// xwininfo input (10, 10, 256, 490) → after driver chrome trim:
-	//   canvas at (10, 10+104=114), 256x(490-104-12=374)
-	// Canvas center: (10 + 128, 114 + 187) = (138, 301)
-	// Bottom half (within trimmed canvas) starts at canvas_y + 187 = 301.
+	//   canvas at (10, 10+85=95), 256x(490-85-21=384)
+	// Canvas center: (10 + 128, 95 + 192) = (138, 287)
+	// Bottom half (within trimmed canvas) starts at canvas_y + 192 = 287.
 	it("presses a button with tap semantics (XTEST + sloppy focus)", async () => {
 		const runner = new MockRunner([
 			{ stdout: textBytes("100\n"), stderr: "", code: 0 },
@@ -98,7 +98,7 @@ describe("DesmumeDriver", () => {
 				args: ["-id", "100"],
 				input: undefined,
 			},
-			{ cmd: "xdotool", args: ["mousemove", "138", "301"], input: undefined },
+			{ cmd: "xdotool", args: ["mousemove", "138", "287"], input: undefined },
 			{ cmd: "xdotool", args: ["windowactivate", "--sync", "100"], input: undefined },
 			{ cmd: "xdotool", args: ["key", "x"], input: undefined },
 		]);
@@ -129,7 +129,7 @@ describe("DesmumeDriver", () => {
 				args: ["-id", "100"],
 				input: undefined,
 			},
-			{ cmd: "xdotool", args: ["mousemove", "138", "301"], input: undefined },
+			{ cmd: "xdotool", args: ["mousemove", "138", "287"], input: undefined },
 			{ cmd: "xdotool", args: ["windowactivate", "--sync", "100"], input: undefined },
 			{ cmd: "xdotool", args: ["keydown", "z"], input: undefined },
 			{ cmd: "xdotool", args: ["keyup", "z"], input: undefined },
@@ -152,21 +152,21 @@ describe("DesmumeDriver", () => {
 
 		await driver.touch(255, 191);
 
-		// Trimmed canvas at (10, 114), 256x374. Half-height = 187.
-		// Touch (255, 191): rootX = 10+255 = 265, rootY = 114+187+191 = 492.
-		// Mouse hover center: (10+128, 114+187) = (138, 301).
+		// Trimmed canvas at (10, 95), 256x384. Half-height = 192.
+		// Touch (255, 191): rootX = 10+255 = 265, rootY = 95+192+191 = 478.
+		// Mouse hover center: (10+128, 95+192) = (138, 287).
 		// Touch uses mousedown + 80ms hold + mouseup so the DS registers a
 		// real tap instead of an instantaneous click.
 		expect(runner.calls).toEqual([
 			{ cmd: "xdotool", args: [...SEARCH_ARGS], input: undefined },
 			{ cmd: "xwininfo", args: ["-id", "777"], input: undefined },
-			{ cmd: "xdotool", args: ["mousemove", "138", "301"], input: undefined },
+			{ cmd: "xdotool", args: ["mousemove", "138", "287"], input: undefined },
 			{
 				cmd: "xdotool",
 				args: ["windowactivate", "--sync", "777"],
 				input: undefined,
 			},
-			{ cmd: "xdotool", args: ["mousemove", "265", "492"], input: undefined },
+			{ cmd: "xdotool", args: ["mousemove", "265", "478"], input: undefined },
 			{ cmd: "xdotool", args: ["mousedown", "1"], input: undefined },
 			{ cmd: "xdotool", args: ["mouseup", "1"], input: undefined },
 		]);
@@ -194,11 +194,11 @@ describe("DesmumeDriver", () => {
 		]);
 		const driver = new DesmumeDriver(runner, async () => {});
 
-		// Trimmed canvas: x=10, y=10+104=114, w=256, h=490-104-12=374.
+		// Trimmed canvas: x=10, y=10+85=95, w=256, h=490-85-21=384.
 		await expect(driver.captureScreen()).resolves.toEqual({
 			base64: "iVBORw==",
 			width: 256,
-			height: 374,
+			height: 384,
 		});
 		expect(runner.calls).toEqual([
 			{ cmd: "xdotool", args: [...SEARCH_ARGS], input: undefined },
@@ -209,7 +209,7 @@ describe("DesmumeDriver", () => {
 			},
 			{
 				cmd: "sh",
-				args: ["-c", "import -window root miff:- | convert miff:- -crop 256x374+10+114 +repage png:-"],
+				args: ["-c", "import -window root miff:- | convert miff:- -crop 256x384+10+95 +repage png:-"],
 				input: undefined,
 			},
 		]);

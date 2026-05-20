@@ -47,14 +47,18 @@ interface CanvasGeometry {
 	readonly height: number;
 }
 
-// DeSmuME 0.9.11 GTK draws a menu + toolbar + thin top border above the
-// game canvas inside the toplevel window. Measured empirically by reading
-// pixel rows of root captures: the actual DS rendering starts ~104 px
-// below the toplevel's upper edge. We subtract this offset from height
-// (and add it to y) so callers get JUST the two DS screens.
-const GTK_CHROME_TOP_PX = 104;
-// And ~12 px below the canvas for the status bar.
-const GTK_CHROME_BOTTOM_PX = 12;
+// DeSmuME 0.9.11 GTK draws a menu + toolbar above the game canvas
+// inside the toplevel window, and a status bar below it. Measured
+// empirically by capturing the full 256x490 window and inspecting
+// where uniform-chrome rows transition into varied-game rows:
+//   rows  0..84  = menu + toolbar (chrome)
+//   rows 85..276 = DS top screen (192 px)
+//   rows 277..468 = DS bottom screen (192 px)
+//   rows 470..489 = status bar (chrome)
+// So the real two-screen canvas is exactly 256x384 starting 85 px
+// below the toplevel's upper edge.
+const GTK_CHROME_TOP_PX = 85;
+const GTK_CHROME_BOTTOM_PX = 21;
 
 export class DesmumeDriver {
 	private windowId: string | undefined;

@@ -86,7 +86,7 @@ describe("input-bridge HTTP server", () => {
 					cmd: "xwininfo",
 					args: ["-id", "9001"],
 				},
-				{ cmd: "xdotool", args: ["mousemove", "138", "301"] },
+				{ cmd: "xdotool", args: ["mousemove", "138", "287"] },
 				{ cmd: "xdotool", args: ["windowactivate", "--sync", "9001"] },
 				{ cmd: "xdotool", args: ["key", BUTTON_KEY_MAP[button]] },
 			]);
@@ -161,7 +161,7 @@ describe("input-bridge HTTP server", () => {
 		await expect(response.json()).resolves.toEqual({
 			image: "iVBORw==",
 			width: 256,
-			height: 374,
+			height: 384,
 		});
 	});
 
@@ -184,7 +184,7 @@ describe("input-bridge HTTP server", () => {
 		expect(runner.calls).toEqual([
 			{ cmd: "xdotool", args: ["search", "--onlyvisible", "--name", "fps"] },
 			{ cmd: "xwininfo", args: ["-id", "300"] },
-			{ cmd: "xdotool", args: ["mousemove", "138", "301"] },
+			{ cmd: "xdotool", args: ["mousemove", "138", "287"] },
 			{ cmd: "xdotool", args: ["windowactivate", "--sync", "300"] },
 			{ cmd: "xdotool", args: ["keydown", "x"] },
 			{ cmd: "xdotool", args: ["keyup", "x"] },
