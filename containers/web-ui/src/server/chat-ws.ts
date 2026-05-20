@@ -16,8 +16,8 @@ interface UpstreamConnection {
 }
 
 const createUpstreamUrl = (): string => {
-  const host = process.env["SENPI_WS_HOST"] ?? "host.docker.internal";
-  const port = Number(process.env["SENPI_WS_PORT"] ?? 7979);
+  const host = process.env.SENPI_WS_HOST ?? "host.docker.internal";
+  const port = Number(process.env.SENPI_WS_PORT ?? 7979);
   return `ws://${host}:${port}`;
 };
 

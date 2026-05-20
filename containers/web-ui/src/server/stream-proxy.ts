@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 
 const MEDIAMTX_WHEP =
-  process.env["MEDIAMTX_WHEP"] ?? "http://mediamtx:8889/dori/whep";
+  process.env.MEDIAMTX_WHEP ?? "http://mediamtx:8889/dori/whep";
 
 export const streamProxy = new Hono();
 

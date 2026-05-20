@@ -52,7 +52,7 @@ app.get("/", serveStatic({ path: "./dist/index.html" }));
 app.get("/main.js", serveStatic({ path: "./dist/main.js" }));
 app.get("/styles.css", serveStatic({ path: "./dist/styles.css" }));
 
-const port = Number(process.env["PORT"] ?? 3001);
+const port = Number(process.env.PORT ?? 3001);
 
 export default {
   port,

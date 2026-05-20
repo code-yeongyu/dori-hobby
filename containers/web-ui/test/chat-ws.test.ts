@@ -27,8 +27,8 @@ afterEach(() => {
 describe("chat ws bridge", () => {
   it("acks valid client message and forwards upstream", async () => {
     const upstreamPort = randomPort();
-    process.env["SENPI_WS_HOST"] = "127.0.0.1";
-    process.env["SENPI_WS_PORT"] = String(upstreamPort);
+    process.env.SENPI_WS_HOST = "127.0.0.1";
+    process.env.SENPI_WS_PORT = String(upstreamPort);
 
     const upstreamServer = new WebSocketServer({ port: upstreamPort });
     const upstreamReceived = new Promise<string>((resolve) => {
