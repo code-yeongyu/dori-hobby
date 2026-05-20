@@ -4,6 +4,20 @@
 logLevel: info
 logDestinations: [stdout]
 
+# Allow local dev access without credentials for read/publish/API.
+authMethod: internal
+authInternalUsers:
+  - user: any
+    pass:
+    ips: []
+    permissions:
+      - action: publish
+      - action: read
+      - action: playback
+      - action: api
+      - action: metrics
+      - action: pprof
+
 # RTSP server (publisher input)
 rtsp: yes
 rtspAddress: :8554
