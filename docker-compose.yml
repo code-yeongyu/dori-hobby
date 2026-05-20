@@ -1,0 +1,83 @@
+# docker-compose.yml — dori-hobby M1
+# Three services:
+#   - emulator   : DeSmuME + Xvfb + ffmpeg-RTSP-push + input-bridge HTTP
+#   - mediamtx   : RTSP ingestion + WebRTC/WHEP out + recording
+#   - web-ui     : Hono backend + React frontend (serves dist/)
+# The senpi agent runs on the HOST (not in compose) and reaches:
+#   - emulator via localhost:7878 (port-forwarded)
+#   - mediamtx via localhost:8889 (WebRTC) and :9996 (API)
+# The web-ui container reaches the host's senpi process via host.docker.internal:7979.
+
+name: dori-hobby
+
+services:
+  emulator:
+    build:
+      context: .
+      dockerfile: containers/emulator/Dockerfile
+    image: dori-hobby/emulator:dev
+    container_name: dori-emulator
+    ports:
+      - "7878:7878"
+    volumes:
+      - ./nds:/app/nds:ro
+      - ./recordings:/app/recordings
+    environment:
+      DISPLAY: ":99"
+      ROM_PATH: "/app/nds/pokemon-white.nds"
+      CHEATS_PATH: "/app/cheats/pokemon-white-us.dct"
+      CONFIG_PATH: "/app/config/desmume.ini"
+      MEDIAMTX_RTSP_URL: "rtsp://mediamtx:8554/dori"
+    depends_on:
+      mediamtx:
+        condition: service_started
+    networks:
+      - dori-net
+    restart: unless-stopped
+    # The emulator needs more privileges for /dev/shm tweaks in some Xvfb setups:
+    shm_size: 256mb
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest-ffmpeg
+    container_name: dori-mediamtx
+    ports:
+      - "8554:8554"   # RTSP ingestion (publisher)
+      - "8889:8889"   # WebRTC HTTP (WHEP)
+      - "9996:9996"   # HTTP API
+      - "8189:8189/udp"  # WebRTC ICE UDP
+      - "8189:8189/tcp"  # WebRTC ICE TCP fallback
+    volumes:
+      - ./containers/mediamtx/mediamtx.yml:/mediamtx.yml:ro
+      - ./recordings:/recordings
+    networks:
+      - dori-net
+    restart: unless-stopped
+
+  web-ui:
+    build:
+      context: .
+      dockerfile: containers/web-ui/Dockerfile
+    image: dori-hobby/web-ui:dev
+    container_name: dori-web-ui
+    ports:
+      - "3001:3001"
+      - "3002:3002"   # WebSocket port if separated
+    environment:
+      PORT: "3001"
+      SENPI_WS_HOST: "host.docker.internal"
+      SENPI_WS_PORT: "7979"
+      MEDIAMTX_WHEP: "http://mediamtx:8889/dori/whep"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      emulator:
+        condition: service_started
+      mediamtx:
+        condition: service_started
+    networks:
+      - dori-net
+    restart: unless-stopped
+
+networks:
+  dori-net:
+    driver: bridge
