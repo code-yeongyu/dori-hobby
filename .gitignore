@@ -1,0 +1,52 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# build
+dist/
+build/
+.turbo/
+.cache/
+*.tsbuildinfo
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/
+.idea/
+
+# ROMS / BIOS — never commit
+/nds/*.nds
+/nds/*.rom
+/nds/*.zip
+/nds/*.7z
+/bios/
+
+# recordings
+/recordings/*
+!/recordings/.gitkeep
+
+# pre-existing workspace artifacts
+/src/
+
+# OMO metadata
+.omo/
+
+# pre-existing workspace files
+playwright.config.ts
+senpi-dori-desmume/extensions/tools/*.ts
+tests/e2e/
+tests/*.test.ts
