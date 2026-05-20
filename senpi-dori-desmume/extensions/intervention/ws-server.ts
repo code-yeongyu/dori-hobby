@@ -34,13 +34,11 @@ let wssRef: WebSocketServer | undefined;
 function broadcastJson(message: AgentActionWire | AgentThinkingWire): void {
 	const server = wssRef;
 	if (server === undefined) {
-		// Server not started yet; tools called before extension boot complete.
 		return;
 	}
 	const text = JSON.stringify(message);
 	for (const client of server.clients) {
 		if (client.readyState === 1) {
-			// 1 === WebSocket.OPEN (avoid the ws.WebSocket static for ESM friendliness).
 			client.send(text);
 		}
 	}
