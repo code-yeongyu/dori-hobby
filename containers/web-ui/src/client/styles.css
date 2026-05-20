@@ -84,16 +84,25 @@ body {
   width: 100%;
   height: 100%;
   background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
 .stream-viewer.is-fullscreen {
-  /* Native fullscreen sizes us to 100vh automatically; we just make sure
-     the inner video stays object-contain so DS aspect is preserved. */
   background: #000;
 }
 
+/* The DS canvas is roughly 256:374 (2:3-ish), but the surrounding box is
+   usually wider than that. We constrain the video to its NATURAL ratio
+   (height fills, width auto) so the picture is never horizontally
+   stretched. The flex parent centers it. `object-fit: contain` is a
+   belt-and-suspenders fallback for browsers that disagree about aspect. */
 .stream-video {
-  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
   height: 100%;
   object-fit: contain;
   background: #000;

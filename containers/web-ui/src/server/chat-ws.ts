@@ -31,6 +31,7 @@ let upstream: UpstreamConnection | undefined;
 const subscribers = new Set<Send>();
 
 const broadcast = (message: ServerToClient): void => {
+  console.log(`[chat-ws] broadcasting ${message.type} to ${subscribers.size} subscriber(s)`);
   for (const send of subscribers) {
     try {
       send(message);

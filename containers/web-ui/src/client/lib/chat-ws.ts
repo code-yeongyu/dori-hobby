@@ -11,7 +11,13 @@ export interface ChatWsClient {
   connect(): void;
   close(): void;
   send(message: ChatMessage): void;
-  onMessage(handler: (message: ServerToClient) => void): void;
+  /**
+   * Register a server message handler. Returns an unsubscribe function —
+   * call it from your useEffect cleanup so React StrictMode's double-mount
+   * doesn't leave a duplicate handler behind that fires every message
+   * twice.
+   */
+  onMessage(handler: (message: ServerToClient) => void): () => void;
 }
 
 const parseServerMessage = (raw: string): ServerToClient | undefined => {
@@ -180,6 +186,12 @@ export const createChatWsClient = (options: ChatWsOptions): ChatWsClient => {
 
     onMessage(handler: (message: ServerToClient) => void) {
       handlers.push(handler);
+      return () => {
+        const idx = handlers.indexOf(handler);
+        if (idx >= 0) {
+          handlers.splice(idx, 1);
+        }
+      };
     },
   };
 };

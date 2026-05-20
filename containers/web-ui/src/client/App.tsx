@@ -41,14 +41,16 @@ export const App = (): JSX.Element => {
   }, []);
 
   useEffect(() => {
-    const off = (): void => {
-      client.close();
-    };
-    client.onMessage((message) => {
+    const unsubscribe = client.onMessage((message) => {
       handleMessage(message, setChatRows, setActivity, setStatus);
     });
     client.connect();
-    return off;
+    return () => {
+      // Unsubscribe FIRST so StrictMode's second mount can't deliver
+      // messages to a stale handler from the first mount.
+      unsubscribe();
+      client.close();
+    };
   }, [client]);
 
   const handleStreamStatus = useCallback((stream: StreamState): void => {
