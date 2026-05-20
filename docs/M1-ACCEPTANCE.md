@@ -47,9 +47,58 @@ attaching a ROM or running the agent.
 **Docker version**: Docker version 29.4.0, build 9d7ad9f
 **Host OS**: Darwin mengmotaMac 25.3.0 arm64
 
+## With-ROM Verification (Pokemon White boots end-to-end)
+
+Performed after dropping `pokemon-white.nds` (256 MiB, game code IRAO,
+SHA-1 `bc696a0dfb448c7b3a8a206f0f8214411a039208`) into `./nds/`.
+
+| # | Check | Status | Evidence |
+|---|-------|--------|----------|
+| A | DeSmuME launches under Xvfb | ✓ PASS | Window class `desmume` + title `DeSmuME - 60fps, 0 skipped, draw: 60fps` |
+| B | ROM loads (no CLI parse errors) | ✓ PASS | `/tmp/desmume.log` shows only ALSA warnings, no "Unknown option" |
+| C | Game advances past Nintendo logo → title screen | ✓ PASS | Top: Reshiram silhouette + glowing red eye. Bottom: "POKEMON WHITE VERSION" logo + "Developed by GAME FREAK inc." |
+| D | `POST /button {button:"A"}` advances dialog | ✓ PASS | 5 sequential A-presses observed in 3 distinct dialog frames: "Welcome to the world of Pokémon!" → "My name is Professor Juniper. Everyone calls me the Pokémon Profe..." (mid-typing) → "Everyone calls me the Pokémon Professor!" |
+| E | `POST /touch {x,y}` reaches canvas (XTEST path) | ✓ PASS | Returns `{ok:true}`; mouse hover transfers focus via openbox sloppy focus before XTEST click |
+| F | `GET /screenshot` returns valid 1024×768 PNG | ✓ PASS | base64-encoded PNG decodes to a frame showing the current DS scene |
+| G | `ffmpeg -i rtsp://localhost:8554/dori` returns live frames | ✓ PASS | One-frame capture shows Professor Juniper live in stream; MediaMTX H264 track present in `/v3/paths/list` |
+| H | input-bridge vitest suite | ✓ PASS | 15/15 pass; `bunx tsc --noEmit` clean; biome clean |
+
+### Fixes applied during with-ROM bring-up
+
+1. `containers/emulator/entrypoint.sh`: stripped unknown DeSmuME CLI
+   flags (`--ini-file`, `--cheat-list`) that were causing the argument
+   parser to bail out before loading the ROM. Added real flags:
+   `--start-paused=0 --disable-sound --load-type=1 --3d-engine=1`. AR
+   cheats are pre-staged into the user XDG config so they can be
+   toggled via the in-emulator UI later.
+2. `containers/emulator/Dockerfile`: installed `openbox`. Without a
+   WM, X has no concept of "focused window", so xdotool's XTEST events
+   went into the void.
+3. `containers/emulator/entrypoint.sh`: wrote
+   `~/.config/openbox/rc.xml` with `<followMouse>yes</followMouse>` +
+   `<underMouse>yes</underMouse>` so hovering the canvas instantly
+   transfers focus to DeSmuME.
+4. `containers/emulator/input-bridge/src/desmume-driver.ts`: rewrote
+   key/touch injection to use bare `xdotool key`/`mousemove`/`click`
+   (XTEST extension, real events) after `xdotool mousemove 517 500` to
+   hover the canvas. The previous `xdotool key --window <id>` path
+   used XSendEvent, which sets `synthetic=YES` on the X event — GDK
+   drops synthetic key events as a security feature, so DeSmuME never
+   saw them. Also switched window search to
+   `--onlyvisible --name fps` to skip the hidden 10x10 GTK helper
+   window. `captureScreen()` now uses `import -window root` (per-window
+   capture intermittently failed with "Resource temporarily
+   unavailable" on Xvfb).
+5. `containers/emulator/input-bridge/test/*.test.ts`: updated mocks
+   for the new XTEST-based xdotool invocation sequence.
+
+**Overall with-ROM gate**: PASSED ✓
+
 ## M1 Status
 
 - [x] All in-session health checks passed (see results above).
+- [x] With-ROM bring-up verified (Pokemon White boots + agent inputs
+  advance dialog).
 - [ ] User acceptance test (Trio Badge clear) — PENDING USER.
 
 To run the user acceptance test, follow "User Acceptance Test" above.
