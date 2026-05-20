@@ -1,5 +1,6 @@
 import { defineTool } from "@code-yeongyu/senpi";
 import { Type } from "typebox";
+import { broadcastAction } from "../intervention/ws-server.js";
 import { captureScreenshot } from "./shared.js";
 
 export const captureScreenTool = defineTool({
@@ -18,6 +19,7 @@ export const captureScreenTool = defineTool({
 	parameters: Type.Object({}),
 	async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {
 		const { contentBlocks } = await captureScreenshot();
+		broadcastAction("screenshot", "captured both screens");
 		return {
 			content: contentBlocks,
 			details: { source: "nds_capture_screen" },

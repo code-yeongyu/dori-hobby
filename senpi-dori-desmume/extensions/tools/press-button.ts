@@ -1,5 +1,6 @@
 import { defineTool } from "@code-yeongyu/senpi";
 import { Type } from "typebox";
+import { broadcastAction } from "../intervention/ws-server.js";
 import { captureScreenshot, postJson } from "./shared.js";
 
 const BUTTONS = [
@@ -41,6 +42,11 @@ export const pressButtonTool = defineTool({
 	}),
 	async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 		await postJson("/button", params);
+		const detail =
+			params.hold_ms !== undefined && params.hold_ms > 0
+				? `${params.button} button (hold ${params.hold_ms}ms)`
+				: `${params.button} button`;
+		broadcastAction("button", detail);
 		const { contentBlocks } = await captureScreenshot();
 		return {
 			content: contentBlocks,

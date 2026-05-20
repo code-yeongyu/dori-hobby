@@ -1,5 +1,6 @@
 import { defineTool } from "@code-yeongyu/senpi";
 import { Type } from "typebox";
+import { broadcastAction } from "../intervention/ws-server.js";
 import { captureScreenshot, postJson } from "./shared.js";
 
 interface TouchParams {
@@ -55,6 +56,7 @@ export const touchTool = defineTool({
 		}
 
 		await postJson("/touch", params);
+		broadcastAction("touch", `(${params.x}, ${params.y}) on bottom screen`);
 		const { contentBlocks } = await captureScreenshot();
 
 		return {
