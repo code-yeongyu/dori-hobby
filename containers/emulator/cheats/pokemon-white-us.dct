@@ -1,7 +1,18 @@
 ; DeSmuME cheats file. VERSION 0.999
+; Name + Serial must match the loaded ROM exactly or DeSmuME refuses to
+; apply the codes. For Pokemon WHITE (USA, NDSi Enhanced) the internal
+; NDS header says:
+;   title  = "POKEMON W"
+;   gamecode = IRAO  (NOT IRBO — that's Pokemon BLACK USA)
+;   header-crc (first 0x200 bytes) = B552501C
 Name=POKEMON W
-Serial=IRBO-EE2D5BFD
+Serial=IRAO-B552501C
 
 ; cheats list
+; The "No EXP" AP is the well-known Pokemon B/W anti-piracy that zeroes
+; out XP gain on emulators. Patches the AP check at $02004EA4 to branch
+; back. Pokemon White v1.0 US uses opcode FDD5 (Black v1.0 uses FDED;
+; keep both rows so the file works for either ROM, but only the matching
+; one needs to be enabled).
 AR 1 52004EA4E12FFF1E,02004EA4EAFFFDD5,D200000000000000 ;Disable No Exp AP (White v1.0 US)
 AR 0 52004EA4E12FFF1E,02004EA4EAFFFDED,D200000000000000 ;Disable No Exp AP (Black v1.0 US)

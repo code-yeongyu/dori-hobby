@@ -20,7 +20,10 @@ services:
     ports:
       - "7878:7878"
     volumes:
-      - ./nds:/app/nds:ro
+      # rw needed so entrypoint can drop <rom-basename>.dct alongside the
+      # ROM for DeSmuME's auto-cheat-load. ROM file itself is gitignored
+      # and the .dct is too (see .gitignore).
+      - ./nds:/app/nds
       - ./recordings:/app/recordings
     environment:
       DISPLAY: ":99"
