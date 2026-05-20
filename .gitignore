@@ -47,6 +47,5 @@ Thumbs.db
 
 # pre-existing workspace files
 playwright.config.ts
-senpi-dori-desmume/extensions/tools/*.ts
 tests/e2e/
 tests/*.test.ts

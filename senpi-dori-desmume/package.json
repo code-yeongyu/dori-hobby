@@ -1,0 +1,30 @@
+{
+	"name": "senpi-dori-desmume",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"pi": {
+		"extensions": ["./extensions"]
+	},
+	"scripts": {
+		"test": "vitest run",
+		"lint": "biome check .",
+		"typecheck": "bunx tsc --noEmit"
+	},
+	"peerDependencies": {
+		"@code-yeongyu/senpi": "*",
+		"@earendil-works/pi-ai": "*",
+		"typebox": "*"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.0",
+		"@code-yeongyu/senpi": "*",
+		"@earendil-works/pi-ai": "*",
+		"@types/node": "^22.0.0",
+		"@types/ws": "^8.18.1",
+		"typescript": "^5.6.0",
+		"typebox": "*",
+		"vitest": "^4.0.0",
+		"ws": "^8.18.3"
+	}
+}
