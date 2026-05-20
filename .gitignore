@@ -24,6 +24,16 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 
+# test artifacts
+test-results/
+playwright-report/
+.playwright/
+
+# stray root lockfiles (each package has its own)
+/bun.lock
+/pnpm-lock.yaml
+/pnpm-workspace.yaml
+
 # editors
 .vscode/
 .idea/
@@ -39,13 +49,5 @@ Thumbs.db
 /recordings/*
 !/recordings/.gitkeep
 
-# pre-existing workspace artifacts
-/src/
-
 # OMO metadata
 .omo/
-
-# pre-existing workspace files
-playwright.config.ts
-tests/e2e/
-tests/*.test.ts
