@@ -190,7 +190,9 @@ export class DesmumeDriver {
 		const rootX = geometry.x + x;
 		const rootY = geometry.y + halfH + y;
 		await this.runner.run("xdotool", ["mousemove", String(rootX), String(rootY)]);
-		await this.runner.run("xdotool", ["click", "1"]);
+		await this.runner.run("xdotool", ["mousedown", "1"]);
+		await this.sleep(80);
+		await this.runner.run("xdotool", ["mouseup", "1"]);
 	}
 
 	public async captureScreen(): Promise<{

@@ -153,23 +153,24 @@ describe("DesmumeDriver", () => {
 		await driver.touch(255, 191);
 
 		// Trimmed canvas at (10, 114), 256x374. Half-height = 187.
-		// Touch (255, 191):
-		//   rootX = 10 + 255 = 265
-		//   rootY = 114 + 187 + 191 = 492
-		// Mouse hover center: (10 + 128, 114 + 187) = (138, 301)
+		// Touch (255, 191): rootX = 10+255 = 265, rootY = 114+187+191 = 492.
+		// Mouse hover center: (10+128, 114+187) = (138, 301).
+		// Touch uses mousedown + 80ms hold + mouseup so the DS registers a
+		// real tap instead of an instantaneous click.
 		expect(runner.calls).toEqual([
 			{ cmd: "xdotool", args: [...SEARCH_ARGS], input: undefined },
+			{ cmd: "xwininfo", args: ["-id", "777"], input: undefined },
+			{ cmd: "xdotool", args: ["mousemove", "138", "301"], input: undefined },
 			{
-				cmd: "xwininfo",
-				args: ["-id", "777"],
+				cmd: "xdotool",
+				args: ["windowactivate", "--sync", "777"],
 				input: undefined,
 			},
-			{ cmd: "xdotool", args: ["mousemove", "138", "301"], input: undefined },
-			{ cmd: "xdotool", args: ["windowactivate", "--sync", "777"], input: undefined },
 			{ cmd: "xdotool", args: ["mousemove", "265", "492"], input: undefined },
-			{ cmd: "xdotool", args: ["click", "1"], input: undefined },
+			{ cmd: "xdotool", args: ["mousedown", "1"], input: undefined },
+			{ cmd: "xdotool", args: ["mouseup", "1"], input: undefined },
 		]);
-		expect(sleeps).toEqual([50]);
+		expect(sleeps).toEqual([50, 80]);
 	});
 
 	it("rejects touch coordinates outside DS bounds", async () => {
