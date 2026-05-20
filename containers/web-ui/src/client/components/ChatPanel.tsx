@@ -1,22 +1,11 @@
-import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ChatMessage, ServerToClient } from "../../shared/types.js";
-import {
-  type ChatConnectionState,
-  createChatWsClient,
-} from "../lib/chat-ws.js";
-
-type AgentState = "running" | "idle" | "disconnected";
+import type { ChatRow } from "../App.js";
+import type { ChatConnectionState } from "../lib/chat-ws.js";
 
 interface ChatPanelProps {
-  readonly onAgentStatus: (state: AgentState) => void;
-}
-
-interface ChatRow {
-  readonly id: string;
-  readonly text: string;
-  readonly pending: boolean;
-  readonly system: boolean;
+  readonly connection: ChatConnectionState;
+  readonly rows: readonly ChatRow[];
+  readonly onSend: (text: string) => string | undefined;
 }
 
 const connectionColor = (state: ChatConnectionState): string => {
@@ -29,67 +18,40 @@ const connectionColor = (state: ChatConnectionState): string => {
   return "var(--accent-error)";
 };
 
-export const ChatPanel = ({ onAgentStatus }: ChatPanelProps): JSX.Element => {
-  const [connection, setConnection] =
-    useState<ChatConnectionState>("disconnected");
-  const [rows, setRows] = useState<readonly ChatRow[]>([]);
+const connectionLabel = (state: ChatConnectionState): string => {
+  if (state === "connected") {
+    return "Connected";
+  }
+  if (state === "reconnecting") {
+    return "Reconnecting";
+  }
+  return "Disconnected";
+};
+
+export const ChatPanel = ({
+  connection,
+  rows,
+  onSend,
+}: ChatPanelProps): JSX.Element => {
   const [value, setValue] = useState<string>("");
   const listRef = useRef<HTMLUListElement | null>(null);
-  const clientRef = useRef<ReturnType<typeof createChatWsClient> | null>(null);
+  const rowCount = rows.length;
 
-  useEffect(() => {
-    const client = createChatWsClient({
-      url: `ws://${window.location.host}/chat`,
-      onState: (state) => {
-        setConnection(state);
-        onAgentStatus(state === "connected" ? "running" : "disconnected");
-      },
-    });
-    clientRef.current = client;
-    client.onMessage((message) => {
-      handleMessage(message, setRows, onAgentStatus);
-    });
-    client.connect();
-
-    return () => {
-      client.close();
-      clientRef.current = null;
-    };
-  }, [onAgentStatus]);
-
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ref-based scroll, runs after each rows update by design.
   useEffect(() => {
     const list = listRef.current;
-    if (list !== null && rows.length >= 0) {
+    if (list !== null) {
       list.scrollTop = list.scrollHeight;
     }
-  }, [rows.length]);
+  }, [rowCount]);
 
-  const statusText = useMemo(() => {
-    if (connection === "connected") {
-      return "Connected";
-    }
-    if (connection === "reconnecting") {
-      return "Reconnecting";
-    }
-    return "Disconnected";
-  }, [connection]);
+  const statusText = useMemo(() => connectionLabel(connection), [connection]);
 
-  const send = (): void => {
-    const text = value.trim();
-    if (text.length === 0 || clientRef.current === null) {
-      return;
+  const submit = (): void => {
+    const id = onSend(value);
+    if (id !== undefined) {
+      setValue("");
     }
-    const id = crypto.randomUUID();
-    const message: ChatMessage = {
-      type: "message",
-      id,
-      text,
-    };
-    setRows((previous) => {
-      return [...previous, { id, text, pending: true, system: false }];
-    });
-    clientRef.current.send(message);
-    setValue("");
   };
 
   return (
@@ -106,19 +68,17 @@ export const ChatPanel = ({ onAgentStatus }: ChatPanelProps): JSX.Element => {
       </header>
 
       <ul className="chat-list" ref={listRef}>
-        {rows.map((row) => {
-          return (
-            <li
-              key={row.id}
-              className={`chat-item${row.system ? " chat-system" : ""}`}
-            >
-              <span>{row.text}</span>
-              {!row.system ? (
-                <small>{row.pending ? "pending" : "ack"}</small>
-              ) : null}
-            </li>
-          );
-        })}
+        {rows.map((row) => (
+          <li
+            key={row.id}
+            className={`chat-item${row.system ? " chat-system" : ""}`}
+          >
+            <span>{row.text}</span>
+            {!row.system ? (
+              <small>{row.pending ? "pending" : "ack"}</small>
+            ) : null}
+          </li>
+        ))}
       </ul>
 
       <div className="chat-form">
@@ -131,50 +91,16 @@ export const ChatPanel = ({ onAgentStatus }: ChatPanelProps): JSX.Element => {
           }}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
-              send();
+              submit();
             }
           }}
+          placeholder="Nudge Dori..."
           aria-label="Chat input"
         />
-        <button type="button" className="btn btn-accent" onClick={send}>
+        <button type="button" className="btn btn-accent" onClick={submit}>
           Send
         </button>
       </div>
     </section>
   );
-};
-
-const handleMessage = (
-  message: ServerToClient,
-  setRows: Dispatch<SetStateAction<readonly ChatRow[]>>,
-  onAgentStatus: (state: AgentState) => void,
-): void => {
-  if (message.type === "ack") {
-    setRows((previous) => {
-      return previous.map((row) => {
-        if (row.id !== message.id) {
-          return row;
-        }
-        return { ...row, pending: false };
-      });
-    });
-    return;
-  }
-
-  if (message.type === "error") {
-    setRows((previous) => {
-      return [
-        ...previous,
-        {
-          id: crypto.randomUUID(),
-          text: message.message,
-          pending: false,
-          system: true,
-        },
-      ];
-    });
-    return;
-  }
-
-  onAgentStatus(message.agent === "running" ? "running" : "idle");
 };

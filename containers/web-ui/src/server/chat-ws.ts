@@ -5,10 +5,14 @@ import WSClient, {
   type WebSocketServer,
 } from "ws";
 import {
+  AgentActionSchema,
+  AgentThinkingSchema,
   type ChatMessage,
   ChatMessageSchema,
   type ServerToClient,
 } from "../shared/types.js";
+
+type Send = (message: ServerToClient) => void;
 
 interface UpstreamConnection {
   readonly socket: WSClient;
@@ -21,14 +25,56 @@ const createUpstreamUrl = (): string => {
   return `ws://${host}:${port}`;
 };
 
+// One upstream WS to senpi (intervention bridge on :7979). Many downstream
+// clients subscribe and we broadcast every upstream message to all of them.
 let upstream: UpstreamConnection | undefined;
+const subscribers = new Set<Send>();
+
+const broadcast = (message: ServerToClient): void => {
+  for (const send of subscribers) {
+    try {
+      send(message);
+    } catch {
+      // best-effort: a dead socket shouldn't break delivery to the others.
+    }
+  }
+};
+
+// Parse + dispatch a message coming FROM senpi. Senpi may stream:
+//   { type: "agent-action", action, detail, ... }
+//   { type: "agent-thinking", text, ... }
+// We schema-check before relaying so a buggy upstream can't pollute the UI.
+const handleUpstreamMessage = (raw: string): void => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw) as unknown;
+  } catch {
+    return;
+  }
+  if (Value.Check(AgentActionSchema, parsed)) {
+    broadcast(parsed);
+    return;
+  }
+  if (Value.Check(AgentThinkingSchema, parsed)) {
+    broadcast(parsed);
+  }
+};
 
 const getOrCreateUpstream = (): UpstreamConnection => {
   if (upstream !== undefined && upstream.socket.readyState === WSClient.OPEN) {
     return upstream;
   }
 
+  // Attach the error handler FIRST so a sync connect failure doesn't fire
+  // an unhandled 'error' event that crashes the bun process. The `ws`
+  // client emits 'error' BEFORE 'close' on ENOTFOUND / ECONNREFUSED, so
+  // we ALWAYS need a listener registered before any other lifecycle work.
   const socket = new WSClient(createUpstreamUrl());
+  socket.on("error", () => {
+    // Swallow: senpi may not be running yet. We retry the next time someone
+    // calls getOrCreateUpstream (chat send, new client connection, etc.).
+  });
+
   const ready = new Promise<void>((resolve, reject) => {
     socket.once("open", () => {
       resolve();
@@ -38,10 +84,14 @@ const getOrCreateUpstream = (): UpstreamConnection => {
     });
   });
 
+  // Defensive: any consumer that does NOT await `ready` would leak an
+  // unhandled rejection. Pre-attach a no-op .catch() to neutralise that.
+  void ready.catch(() => {});
+
   upstream = { socket, ready };
-  socket.on("error", () => {
-    // handled by promise rejection path above for first-connect,
-    // and ignored for later lifecycle events.
+  socket.on("message", (raw: RawData) => {
+    const text = typeof raw === "string" ? raw : raw.toString();
+    handleUpstreamMessage(text);
   });
   socket.once("close", () => {
     upstream = undefined;
@@ -106,9 +156,31 @@ export const closeUpstreamForTest = (): void => {
   }
 };
 
+/**
+ * Subscribe a downstream client to upstream broadcasts (agent-action,
+ * agent-thinking). The returned function removes the subscription.
+ *
+ * Calling this also lazily opens the upstream connection so the senpi
+ * bridge gets a single WS even when many tabs are open.
+ */
+export const subscribeToUpstream = (send: Send): (() => void) => {
+  subscribers.add(send);
+  // Eager attempt to open upstream — if senpi isn't running yet, we keep
+  // the subscriber registered and `getOrCreateUpstream` will be retried
+  // the next time a chat message is sent.
+  try {
+    getOrCreateUpstream();
+  } catch {
+    // Ignored: upstream not available yet, will retry on demand.
+  }
+  return (): void => {
+    subscribers.delete(send);
+  };
+};
+
 export const handleBunMessage = async (
   raw: string,
-  send: (message: ServerToClient) => void,
+  send: Send,
 ): Promise<void> => {
   let parsedUnknown: unknown;
   try {

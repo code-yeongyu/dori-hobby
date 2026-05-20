@@ -61,6 +61,39 @@ const parseServerMessage = (raw: string): ServerToClient | undefined => {
       agent: candidate.agent,
     };
   }
+
+  if (
+    typeValue === "agent-action" &&
+    typeof candidate.id === "string" &&
+    typeof candidate.timestamp === "number" &&
+    (candidate.action === "button" ||
+      candidate.action === "touch" ||
+      candidate.action === "screenshot") &&
+    typeof candidate.detail === "string"
+  ) {
+    return {
+      type: "agent-action",
+      id: candidate.id,
+      timestamp: candidate.timestamp,
+      action: candidate.action,
+      detail: candidate.detail,
+    };
+  }
+
+  if (
+    typeValue === "agent-thinking" &&
+    typeof candidate.id === "string" &&
+    typeof candidate.timestamp === "number" &&
+    typeof candidate.text === "string"
+  ) {
+    return {
+      type: "agent-thinking",
+      id: candidate.id,
+      timestamp: candidate.timestamp,
+      text: candidate.text,
+    };
+  }
+
   return undefined;
 };
 

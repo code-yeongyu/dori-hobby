@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createWhepClient } from "../lib/whep-client.js";
 
 type StreamState = "connecting" | "live" | "disconnected";
@@ -14,9 +14,11 @@ const fallbackWhepUrl = (): string => {
 export const StreamViewer = ({
   onStreamStatus,
 }: StreamViewerProps): JSX.Element => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [state, setState] = useState<StreamState>("connecting");
   const [muted, setMuted] = useState<boolean>(true);
+  const [fullscreen, setFullscreen] = useState<boolean>(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -71,8 +73,61 @@ export const StreamViewer = ({
     };
   }, [onStreamStatus]);
 
+  // Track REAL fullscreen state from the browser, not just our toggle —
+  // ESC, F11, etc. all change it without going through our button.
+  useEffect(() => {
+    const sync = (): void => {
+      setFullscreen(document.fullscreenElement !== null);
+    };
+    document.addEventListener("fullscreenchange", sync);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+    };
+  }, []);
+
+  const toggleFullscreen = useCallback((): void => {
+    const target = containerRef.current;
+    if (target === null) {
+      return;
+    }
+    if (document.fullscreenElement === null) {
+      void target.requestFullscreen().catch(() => {
+        // Ignore: some browsers block fullscreen from non-user-gesture paths.
+      });
+    } else {
+      void document.exitFullscreen().catch(() => {
+        // Ignore: already exited.
+      });
+    }
+  }, []);
+
+  // Keyboard shortcut: F or f → toggle fullscreen (matches YouTube, Twitch).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      const target = event.target as HTMLElement | null;
+      if (target !== null) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") {
+          return;
+        }
+      }
+      if (event.key === "f" || event.key === "F") {
+        event.preventDefault();
+        toggleFullscreen();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [toggleFullscreen]);
+
   return (
-    <section className="stream-viewer" aria-label="Live stream viewer">
+    <section
+      ref={containerRef}
+      className={`stream-viewer${fullscreen ? " is-fullscreen" : ""}`}
+      aria-label="Live stream viewer"
+    >
       <video
         className="stream-video"
         ref={videoRef}
@@ -80,6 +135,7 @@ export const StreamViewer = ({
         autoPlay
         playsInline
         controls={false}
+        onDoubleClick={toggleFullscreen}
       />
 
       {state !== "live" ? (
@@ -106,21 +162,33 @@ export const StreamViewer = ({
         </div>
       ) : null}
 
-      {muted ? (
+      <div className="stream-controls">
+        {muted ? (
+          <button
+            type="button"
+            className="btn stream-ctrl"
+            onClick={() => {
+              setMuted(false);
+              const video = videoRef.current;
+              if (video !== null) {
+                video.muted = false;
+              }
+            }}
+            title="Unmute (audio)"
+          >
+            Unmute
+          </button>
+        ) : null}
         <button
           type="button"
-          className="btn stream-unmute"
-          onClick={() => {
-            setMuted(false);
-            const video = videoRef.current;
-            if (video !== null) {
-              video.muted = false;
-            }
-          }}
+          className="btn stream-ctrl"
+          onClick={toggleFullscreen}
+          aria-label={fullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          title="Fullscreen (F or double-click)"
         >
-          Unmute
+          {fullscreen ? "Exit" : "Fullscreen"}
         </button>
-      ) : null}
+      </div>
     </section>
   );
 };
