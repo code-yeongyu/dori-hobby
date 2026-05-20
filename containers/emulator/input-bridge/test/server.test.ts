@@ -62,9 +62,10 @@ describe("input-bridge HTTP server", () => {
 			expect(response.status).toBe(200);
 			await expect(response.json()).resolves.toEqual({ ok: true });
 			expect(runner.calls).toEqual([
-				{ cmd: "xdotool", args: ["search", "--class", "desmume"] },
-				{ cmd: "xdotool", args: ["windowfocus", "--sync", "9001"] },
-				{ cmd: "xdotool", args: ["key", "--window", "9001", BUTTON_KEY_MAP[button]] },
+				{ cmd: "xdotool", args: ["search", "--onlyvisible", "--name", "fps"] },
+				{ cmd: "xdotool", args: ["mousemove", "517", "500"] },
+				{ cmd: "xdotool", args: ["windowactivate", "--sync", "9001"] },
+				{ cmd: "xdotool", args: ["key", BUTTON_KEY_MAP[button]] },
 			]);
 		}
 	});
@@ -123,17 +124,14 @@ describe("input-bridge HTTP server", () => {
 		}
 	});
 
-	it("captures screenshots via /screenshot", async () => {
-		const runner = new MockRunner([
-			{ stdout: textBytes("300\n"), stderr: "", code: 0 },
-			{ stdout: Uint8Array.of(137, 80, 78, 71), stderr: "", code: 0 },
-		]);
+	it("captures screenshots via /screenshot (root window capture)", async () => {
+		const runner = new MockRunner([{ stdout: Uint8Array.of(137, 80, 78, 71), stderr: "", code: 0 }]);
 		const { app } = setup(runner, async () => {});
 
 		const response = await app.request("/screenshot");
 
 		expect(response.status).toBe(200);
-		await expect(response.json()).resolves.toEqual({ image: "iVBORw==", width: 512, height: 768 });
+		await expect(response.json()).resolves.toEqual({ image: "iVBORw==", width: 1024, height: 768 });
 	});
 
 	it("uses hold_ms as keydown + keyup flow", async () => {
@@ -150,12 +148,14 @@ describe("input-bridge HTTP server", () => {
 		});
 
 		expect(response.status).toBe(200);
-		expect(sleeps).toEqual([500]);
+		// First sleep (50ms) is the focus settle after windowactivate; second is the hold.
+		expect(sleeps).toEqual([50, 500]);
 		expect(runner.calls).toEqual([
-			{ cmd: "xdotool", args: ["search", "--class", "desmume"] },
-			{ cmd: "xdotool", args: ["windowfocus", "--sync", "300"] },
-			{ cmd: "xdotool", args: ["keydown", "--window", "300", "x"] },
-			{ cmd: "xdotool", args: ["keyup", "--window", "300", "x"] },
+			{ cmd: "xdotool", args: ["search", "--onlyvisible", "--name", "fps"] },
+			{ cmd: "xdotool", args: ["mousemove", "517", "500"] },
+			{ cmd: "xdotool", args: ["windowactivate", "--sync", "300"] },
+			{ cmd: "xdotool", args: ["keydown", "x"] },
+			{ cmd: "xdotool", args: ["keyup", "x"] },
 		]);
 	});
 

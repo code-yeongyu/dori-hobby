@@ -7,6 +7,9 @@ CONFIG_PATH="${CONFIG_PATH:-/app/config/desmume.ini}"
 DISPLAY_NUM="${DISPLAY_NUM:-99}"
 export DISPLAY=":${DISPLAY_NUM}"
 
+# Debian installs game binaries in /usr/games — make sure desmume is on PATH.
+export PATH="/usr/games:${PATH}"
+
 cleanup() {
 	if [ -n "${FFMPEG_PID:-}" ] && ps -p "${FFMPEG_PID}" >/dev/null 2>&1; then
 		kill "${FFMPEG_PID}" || true
@@ -46,14 +49,44 @@ if [ ! -f "${ROM_PATH}" ]; then
 	DESMUME_PID=""
 else
 	# --- 3. Launch DeSmuME ---
+	# DeSmuME 0.9.11 CLI is intentionally small: NO --ini-file, NO --cheat-list,
+	# NO --cheat-file. Cheats are loaded via the UI menu (Tools > Cheats > List)
+	# OR by dropping a cheat .dct file in the user config dir. We do that
+	# separately (copy into the matching XDG path).
 	echo "[entrypoint] launching desmume with ROM=${ROM_PATH}"
-	DESMUME_ARGS=()
-	if [ -f "${CONFIG_PATH}" ]; then
-		DESMUME_ARGS+=("--ini-file=${CONFIG_PATH}")
-	fi
+	DESMUME_ARGS=(
+		"--start-paused=0"
+		"--disable-sound"      # no ALSA inside container
+		"--load-type=1"        # load 256MB ROM entirely to RAM (more reliable than streaming)
+		"--3d-engine=1"        # internal software rasterizer (no GL needed)
+		"--save-type=0"        # autodetect savetype
+	)
+	# Pre-stage cheats into DeSmuME's XDG config path so the user can enable
+	# them via UI / Tools menu without further work.
 	if [ -f "${CHEATS_PATH}" ]; then
-		DESMUME_ARGS+=("--cheat-file=${CHEATS_PATH}")
+		mkdir -p "${HOME}/.config/desmume/cheats" 2>/dev/null || true
+		cp -f "${CHEATS_PATH}" "${HOME}/.config/desmume/cheats/" 2>/dev/null || true
 	fi
+	# Launch openbox with sloppy/under-mouse focus so xdotool's XTEST keys
+	# (which need a focused window) land on whichever window the mouse is
+	# hovering. The input-bridge moves the cursor over the DeSmuME canvas
+	# before sending keys, which gives it focus instantly.
+	mkdir -p "${HOME}/.config/openbox"
+	cat > "${HOME}/.config/openbox/rc.xml" <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <focus>
+    <focusNew>yes</focusNew>
+    <followMouse>yes</followMouse>
+    <focusLast>yes</focusLast>
+    <underMouse>yes</underMouse>
+    <focusDelay>0</focusDelay>
+    <raiseOnFocus>yes</raiseOnFocus>
+  </focus>
+</openbox_config>
+XML
+	openbox-session >/tmp/openbox.log 2>&1 &
+	sleep 0.5
 	desmume "${DESMUME_ARGS[@]}" "${ROM_PATH}" >/tmp/desmume.log 2>&1 &
 	DESMUME_PID=$!
 

@@ -46,7 +46,11 @@ export class DesmumeDriver {
 		}
 
 		for (let attempt = 0; attempt < 3; attempt += 1) {
-			const result = await this.runner.run("xdotool", ["search", "--class", "desmume"]);
+			// Match the VISIBLE game-canvas window (DeSmuME titles it
+			// "DeSmuME - <fps> fps, ..."). `--class desmume` also matches
+			// the hidden 10x10 GTK helper window which silently swallows
+			// XSendEvent keys; filter to onlyvisible + name "fps" to be safe.
+			const result = await this.runner.run("xdotool", ["search", "--onlyvisible", "--name", "fps"]);
 			if (result.code === 0) {
 				const id = firstLine(result.stdout);
 				if (id !== undefined) {
@@ -60,20 +64,39 @@ export class DesmumeDriver {
 		throw new Error("desmume window not found");
 	}
 
+	/**
+	 * Move the mouse cursor over the game canvas. With openbox configured
+	 * for sloppy/under-mouse focus, this transfers keyboard focus to the
+	 * DeSmuME window. We then use `xdotool key` WITHOUT --window, which
+	 * uses the XTEST extension (real-looking events) instead of
+	 * XSendEvent (synthetic, dropped by GDK's send_event filter).
+	 *
+	 * This indirection is necessary because DeSmuME GTK ignores synthetic
+	 * X events for game-button presses.
+	 */
+	private async focusCanvas(windowId: string): Promise<void> {
+		// Canvas is roughly 256x490 in its top-level frame at 388,253 on root.
+		// Place mouse near the center of the canvas (absolute root coords).
+		await this.runner.run("xdotool", ["mousemove", "517", "500"]);
+		await this.runner.run("xdotool", ["windowactivate", "--sync", windowId]);
+		await this.sleep(50);
+	}
+
 	public async pressButton(button: NdsButton, holdMs?: number): Promise<void> {
 		const windowId = await this.findWindow();
 		const key = BUTTON_KEY_MAP[button];
 
-		await this.runner.run("xdotool", ["windowfocus", "--sync", windowId]);
+		await this.focusCanvas(windowId);
 
 		if (holdMs === undefined || holdMs <= 0) {
-			await this.runner.run("xdotool", ["key", "--window", windowId, key]);
+			// XTEST-backed key event (no --window) — bypasses GDK synthetic filter.
+			await this.runner.run("xdotool", ["key", key]);
 			return;
 		}
 
-		await this.runner.run("xdotool", ["keydown", "--window", windowId, key]);
+		await this.runner.run("xdotool", ["keydown", key]);
 		await this.sleep(holdMs);
-		await this.runner.run("xdotool", ["keyup", "--window", windowId, key]);
+		await this.runner.run("xdotool", ["keyup", key]);
 	}
 
 	public async touch(x: number, y: number): Promise<void> {
@@ -85,32 +108,30 @@ export class DesmumeDriver {
 		}
 
 		const windowId = await this.findWindow();
-		const windowX = x * 2;
-		const windowY = 384 + y * 2;
-
-		await this.runner.run("xdotool", [
-			"mousemove",
-			"--window",
-			windowId,
-			String(windowX),
-			String(windowY),
-			"click",
-			"--window",
-			windowId,
-			"1",
-		]);
+		// Canvas is 256x490 inside the frame at 388,253. The lower DS
+		// half lives at canvas-local y=[260..490], width 256. Convert
+		// DS-touch coords to absolute root coords (no --window, so XTEST
+		// click goes through the same synthetic-filter-free path as keys).
+		const rootX = 389 + x;
+		const rootY = 273 + 260 + y;
+		await this.focusCanvas(windowId);
+		await this.runner.run("xdotool", ["mousemove", String(rootX), String(rootY)]);
+		await this.runner.run("xdotool", ["click", "1"]);
 	}
 
 	public async captureScreen(): Promise<{ readonly base64: string; readonly width: number; readonly height: number }> {
-		const windowId = await this.findWindow();
-		const result = await this.runner.run("import", ["-window", windowId, "png:-"]);
+		// `import -window <child>` regularly fails with
+		// "Resource temporarily unavailable" on Xvfb because GTK keeps the
+		// canvas backing pixmap busy. Capture the root window — DeSmuME is
+		// the only visible app, so the framing is stable.
+		const result = await this.runner.run("import", ["-window", "root", "png:-"]);
 		if (result.code !== 0) {
 			throw new Error("screen capture failed");
 		}
 
 		return {
 			base64: Buffer.from(result.stdout).toString("base64"),
-			width: 512,
+			width: 1024,
 			height: 768,
 		};
 	}
