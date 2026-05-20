@@ -1,0 +1,23 @@
+{
+	"name": "input-bridge",
+	"version": "0.1.0",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"dev": "bun run --watch src/server.ts",
+		"start": "bun run src/server.ts",
+		"test": "vitest run",
+		"lint": "biome check .",
+		"typecheck": "bunx tsc --noEmit"
+	},
+	"dependencies": {
+		"@hono/typebox-validator": "^0.3.0",
+		"hono": "^4.6.0",
+		"@sinclair/typebox": "^0.34.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.4.0",
+		"@types/bun": "latest",
+		"vitest": "^4.0.0"
+	}
+}
