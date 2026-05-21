@@ -191,7 +191,17 @@ export function startInterventionServer(
 					sendError(sock, "injection failed: unavailable");
 					return;
 				}
-				currentPi.sendUserMessage(parsed.text);
+				// 'steer' interrupts the current assistant response and
+				// redirects with the new user message. The chat panel's
+				// purpose IS mid-flight intervention — a watcher saying
+				// "wait you missed the gift box" needs to land NOW, not
+				// after Dori finishes whatever 50-button mash she's on.
+				// Without streamingBehavior, senpi 2026.5.19+ rejects mid-
+				// response with "Agent is already processing" and the
+				// user's nudge silently vanishes.
+				currentPi.sendUserMessage(parsed.text, {
+					streamingBehavior: "steer",
+				});
 				const ack: ChatAck = { type: "ack", id: parsed.id };
 				sock.send(JSON.stringify(ack));
 			} catch (error) {
