@@ -215,17 +215,25 @@ export function startInterventionServer(
 					sendError(sock, "injection failed: unavailable");
 					return;
 				}
-				// 'steer' interrupts the current assistant response and
-				// redirects with the new user message. The chat panel's
-				// purpose IS mid-flight intervention — a watcher saying
-				// "wait you missed the gift box" needs to land NOW, not
-				// after Dori finishes whatever 50-button mash she's on.
-				// Without streamingBehavior, senpi 2026.5.19+ rejects mid-
-				// response with "Agent is already processing" and the
-				// user's nudge silently vanishes.
-				currentPi.sendUserMessage(parsed.text, {
-					deliverAs: "steer",
-				});
+				// 'steer' deliveryAs interrupts the current assistant response
+				// and redirects with the new user message — required by senpi
+				// 2026.5.19+ for any chat injection during an active turn.
+				const maybePromise: unknown = currentPi.sendUserMessage(
+					parsed.text,
+					{ deliverAs: "steer" },
+				);
+				if (
+					maybePromise !== null &&
+					typeof maybePromise === "object" &&
+					typeof (maybePromise as { then?: unknown }).then === "function"
+				) {
+					(maybePromise as Promise<unknown>).catch((error: unknown) => {
+						console.error(
+							"[senpi-dori-desmume] chat injection rejected:",
+							error instanceof Error ? error.message : error,
+						);
+					});
+				}
 				const ack: ChatAck = { type: "ack", id: parsed.id };
 				sock.send(JSON.stringify(ack));
 			} catch (error) {

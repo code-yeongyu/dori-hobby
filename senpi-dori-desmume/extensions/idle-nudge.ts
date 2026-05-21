@@ -45,13 +45,25 @@ export function installIdleNudge(
 				"screenshot",
 				`auto-nudge (idle ${Math.round(options.idleTimeoutMs / 1000)}s)`,
 			);
-			try {
-				pi.sendUserMessage(options.nudgeText, { deliverAs: "steer" });
-			} catch (error: unknown) {
+			const logFailure = (error: unknown): void => {
 				console.error(
 					"[senpi-dori-desmume] idle nudge failed:",
 					error instanceof Error ? error.message : error,
 				);
+			};
+			try {
+				const maybePromise: unknown = pi.sendUserMessage(options.nudgeText, {
+					deliverAs: "steer",
+				});
+				if (
+					maybePromise !== null &&
+					typeof maybePromise === "object" &&
+					typeof (maybePromise as { then?: unknown }).then === "function"
+				) {
+					(maybePromise as Promise<unknown>).catch(logFailure);
+				}
+			} catch (error: unknown) {
+				logFailure(error);
 			}
 		}, options.idleTimeoutMs);
 	});

@@ -91,3 +91,7 @@ services:
 networks:
   dori-net:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 192.168.107.0/24
+          gateway: 192.168.107.1

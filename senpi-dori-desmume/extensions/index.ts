@@ -20,6 +20,7 @@ const DEFAULT_AUTOSAVE_INTERVAL_MS = 60_000;
 const DEFAULT_AUTOSAVE_SLOT = 1;
 const DEFAULT_BRIDGE_URL = "http://localhost:8787";
 const DEFAULT_IDLE_NUDGE_MS = 45_000;
+const DEFAULT_BACKUP_EVERY_N_SAVES = 5;
 const IDLE_NUDGE_TEXT =
 	"AUTOMATED NUDGE: you went idle. Your goal is to play Pokemon White and progress the story toward the Striaton Trio Badge. Take the next action NOW: capture screen, read notepad, then move forward with nds_press_sequence or nds_advance_dialog. Do not stop again.";
 
@@ -35,6 +36,29 @@ async function saveStateToBridge(
 	if (!response.ok) {
 		const text = await response.text();
 		throw new Error(`save-state http ${response.status}: ${text}`);
+	}
+}
+
+async function backupSaveStateToHost(slot: number): Promise<void> {
+	const fs = await import("node:fs/promises");
+	const path = await import("node:path");
+	const src = path.resolve("desmume-state", `pokemon-white.ds${slot}`);
+	const backupDir = path.resolve("desmume-state", "backups");
+	await fs.mkdir(backupDir, { recursive: true });
+	const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+	const dst = path.join(backupDir, `pokemon-white.ds${slot}.${stamp}`);
+	await fs.copyFile(src, dst);
+
+	const entries = await fs.readdir(backupDir);
+	const matching = entries
+		.filter((name) => name.startsWith(`pokemon-white.ds${slot}.`))
+		.sort();
+	const keepN = 20;
+	if (matching.length > keepN) {
+		const toDelete = matching.slice(0, matching.length - keepN);
+		await Promise.all(
+			toDelete.map((name) => fs.unlink(path.join(backupDir, name))),
+		);
 	}
 }
 
@@ -90,12 +114,27 @@ export default async function extension(pi: ExtensionAPI): Promise<void> {
 		process.env.NDS_AUTOSAVE_SLOT ?? DEFAULT_AUTOSAVE_SLOT,
 	);
 	const bridgeUrl = process.env.NDS_BRIDGE_URL ?? DEFAULT_BRIDGE_URL;
+	const backupEveryN = Number(
+		process.env.NDS_BACKUP_EVERY_N_SAVES ?? DEFAULT_BACKUP_EVERY_N_SAVES,
+	);
+	let autosaveTickCount = 0;
 	const autosaveTimer =
 		autosaveIntervalMs > 0
 			? setInterval(() => {
 					void saveStateToBridge(bridgeUrl, autosaveSlot)
-						.then(() => {
+						.then(async () => {
+							autosaveTickCount += 1;
 							broadcastAction("screenshot", `autosaved slot ${autosaveSlot}`);
+							if (backupEveryN > 0 && autosaveTickCount % backupEveryN === 0) {
+								await backupSaveStateToHost(autosaveSlot).catch(
+									(error: unknown) => {
+										console.error(
+											"[senpi-dori-desmume] save backup failed:",
+											error instanceof Error ? error.message : error,
+										);
+									},
+								);
+							}
 						})
 						.catch((error: unknown) => {
 							console.error(
