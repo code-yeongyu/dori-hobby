@@ -1,4 +1,19 @@
-import { BUTTON_KEY_MAP, type NdsButton, TOUCH_MAX_X, TOUCH_MAX_Y } from "./types.js";
+import {
+	assertIntegerInRange,
+	assertNever,
+	assertTouchPoint,
+	DEFAULT_TOUCH_HOLD_MS,
+	type ResolvedButtonPressOptions,
+	resolveButtonPressOptions,
+	TOUCH_DRAG_FRAME_MS,
+} from "./input-options.js";
+import {
+	BUTTON_KEY_MAP,
+	type ButtonPressOptions,
+	type NdsButton,
+	type SequenceStep,
+	type TouchPoint,
+} from "./types.js";
 
 export type CommandResult = {
 	readonly stdout: Uint8Array;
@@ -156,30 +171,51 @@ export class DesmumeDriver {
 		await this.sleep(50);
 	}
 
-	public async pressButton(button: NdsButton, holdMs?: number): Promise<void> {
-		const windowId = await this.findWindow();
+	private async pressButtonFocused(button: NdsButton, options: ResolvedButtonPressOptions): Promise<void> {
 		const key = BUTTON_KEY_MAP[button];
-
-		await this.focusCanvas(windowId);
-
-		if (holdMs === undefined || holdMs <= 0) {
-			// XTEST-backed key event (no --window) — bypasses GDK synthetic filter.
-			await this.runner.run("xdotool", ["key", key]);
+		if (options.holdMs > 0) {
+			await this.runner.run("xdotool", ["keydown", key]);
+			await this.sleep(options.holdMs);
+			await this.runner.run("xdotool", ["keyup", key]);
 			return;
 		}
 
-		await this.runner.run("xdotool", ["keydown", key]);
-		await this.sleep(holdMs);
-		await this.runner.run("xdotool", ["keyup", key]);
+		for (let index = 0; index < options.repeatCount; index += 1) {
+			await this.runner.run("xdotool", ["key", key]);
+			if (index < options.repeatCount - 1) {
+				await this.sleep(options.repeatIntervalMs);
+			}
+		}
 	}
 
-	public async touch(x: number, y: number): Promise<void> {
-		if (x < 0 || x > TOUCH_MAX_X) {
-			throw new Error(`x out of range: ${x}`);
-		}
-		if (y < 0 || y > TOUCH_MAX_Y) {
-			throw new Error(`y out of range: ${y}`);
-		}
+	public async pressButton(button: NdsButton, options?: number | ButtonPressOptions): Promise<void> {
+		const resolvedOptions = resolveButtonPressOptions(options);
+		const windowId = await this.findWindow();
+
+		await this.focusCanvas(windowId);
+		await this.pressButtonFocused(button, resolvedOptions);
+	}
+
+	private async getTouchRootPoint(point: TouchPoint): Promise<TouchPoint> {
+		const geometry = await this.getCanvasGeometry();
+		const halfH = Math.floor(geometry.height / 2);
+		return { x: geometry.x + point.x, y: geometry.y + halfH + point.y };
+	}
+
+	private async touchFocused(point: TouchPoint, holdMs: number): Promise<void> {
+		assertTouchPoint(point);
+		assertIntegerInRange("hold_ms", holdMs, 50, 5000);
+		const root = await this.getTouchRootPoint(point);
+		await this.runner.run("xdotool", ["mousemove", String(root.x), String(root.y)]);
+		await this.runner.run("xdotool", ["mousedown", "1"]);
+		await this.sleep(holdMs);
+		await this.runner.run("xdotool", ["mouseup", "1"]);
+	}
+
+	public async touch(x: number, y: number, holdMs = DEFAULT_TOUCH_HOLD_MS): Promise<void> {
+		const point = { x, y };
+		assertTouchPoint(point);
+		assertIntegerInRange("hold_ms", holdMs, 50, 5000);
 
 		const windowId = await this.findWindow();
 		await this.focusCanvas(windowId);
@@ -189,14 +225,60 @@ export class DesmumeDriver {
 		// The default DeSmuME 0.9.11 canvas at 1x is 256x490 with a small
 		// gap between screens. Half-and-half is a good-enough approximation
 		// for clicking the bottom screen.
-		const geometry = await this.getCanvasGeometry();
-		const halfH = Math.floor(geometry.height / 2);
-		const rootX = geometry.x + x;
-		const rootY = geometry.y + halfH + y;
-		await this.runner.run("xdotool", ["mousemove", String(rootX), String(rootY)]);
+		await this.touchFocused(point, holdMs);
+	}
+
+	private async touchDragFocused(from: TouchPoint, to: TouchPoint, durationMs: number): Promise<void> {
+		assertTouchPoint(from);
+		assertTouchPoint(to);
+		assertIntegerInRange("duration_ms", durationMs, 50, 3000);
+		const fromRoot = await this.getTouchRootPoint(from);
+		const toRoot = await this.getTouchRootPoint(to);
+		const frameCount = Math.max(1, Math.ceil(durationMs / TOUCH_DRAG_FRAME_MS));
+		const frameDelayMs = Math.max(1, Math.round(durationMs / frameCount));
+		await this.runner.run("xdotool", ["mousemove", String(fromRoot.x), String(fromRoot.y)]);
 		await this.runner.run("xdotool", ["mousedown", "1"]);
-		await this.sleep(80);
+		for (let frame = 1; frame <= frameCount; frame += 1) {
+			await this.sleep(frameDelayMs);
+			const ratio = frame / frameCount;
+			const rootX = Math.round(fromRoot.x + (toRoot.x - fromRoot.x) * ratio);
+			const rootY = Math.round(fromRoot.y + (toRoot.y - fromRoot.y) * ratio);
+			await this.runner.run("xdotool", ["mousemove", String(rootX), String(rootY)]);
+		}
 		await this.runner.run("xdotool", ["mouseup", "1"]);
+	}
+
+	public async touchDrag(from: TouchPoint, to: TouchPoint, durationMs: number): Promise<void> {
+		assertTouchPoint(from);
+		assertTouchPoint(to);
+		assertIntegerInRange("duration_ms", durationMs, 50, 3000);
+		const windowId = await this.findWindow();
+		await this.focusCanvas(windowId);
+		await this.touchDragFocused(from, to, durationMs);
+	}
+
+	public async runSequence(steps: readonly SequenceStep[]): Promise<void> {
+		const windowId = await this.findWindow();
+		await this.focusCanvas(windowId);
+		for (const step of steps) {
+			switch (step.kind) {
+				case "button":
+					await this.pressButtonFocused(step.button, resolveButtonPressOptions(step));
+					break;
+				case "touch":
+					await this.touchFocused({ x: step.x, y: step.y }, step.hold_ms ?? DEFAULT_TOUCH_HOLD_MS);
+					break;
+				case "touch_drag":
+					await this.touchDragFocused(step.from, step.to, step.duration_ms);
+					break;
+				case "wait":
+					assertIntegerInRange("ms", step.ms, 0, 10000);
+					await this.sleep(step.ms);
+					break;
+				default:
+					assertNever(step);
+			}
+		}
 	}
 
 	/**

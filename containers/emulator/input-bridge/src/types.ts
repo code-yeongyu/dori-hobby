@@ -6,28 +6,75 @@ export type NdsButton = (typeof NDS_BUTTONS)[number];
 
 export const TOUCH_MAX_X = 255;
 export const TOUCH_MAX_Y = 191;
+export const SEQUENCE_MAX_STEPS = 32;
+
+export const NdsButtonSchema = Type.Union([
+	Type.Literal("A"),
+	Type.Literal("B"),
+	Type.Literal("X"),
+	Type.Literal("Y"),
+	Type.Literal("L"),
+	Type.Literal("R"),
+	Type.Literal("Start"),
+	Type.Literal("Select"),
+	Type.Literal("Up"),
+	Type.Literal("Down"),
+	Type.Literal("Left"),
+	Type.Literal("Right"),
+]);
 
 export const ButtonSchema = Type.Object({
-	button: Type.Union([
-		Type.Literal("A"),
-		Type.Literal("B"),
-		Type.Literal("X"),
-		Type.Literal("Y"),
-		Type.Literal("L"),
-		Type.Literal("R"),
-		Type.Literal("Start"),
-		Type.Literal("Select"),
-		Type.Literal("Up"),
-		Type.Literal("Down"),
-		Type.Literal("Left"),
-		Type.Literal("Right"),
-	]),
+	button: NdsButtonSchema,
 	hold_ms: Type.Optional(Type.Integer({ minimum: 0, maximum: 5000 })),
+	repeat_count: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
+	repeat_interval_ms: Type.Optional(Type.Integer({ minimum: 10, maximum: 2000 })),
+});
+
+export const TouchPointSchema = Type.Object({
+	x: Type.Integer({ minimum: 0, maximum: TOUCH_MAX_X }),
+	y: Type.Integer({ minimum: 0, maximum: TOUCH_MAX_Y }),
 });
 
 export const TouchSchema = Type.Object({
 	x: Type.Integer({ minimum: 0, maximum: TOUCH_MAX_X }),
 	y: Type.Integer({ minimum: 0, maximum: TOUCH_MAX_Y }),
+	hold_ms: Type.Optional(Type.Integer({ minimum: 50, maximum: 5000 })),
+});
+
+export const TouchDragSchema = Type.Object({
+	from: TouchPointSchema,
+	to: TouchPointSchema,
+	duration_ms: Type.Integer({ minimum: 50, maximum: 3000 }),
+});
+
+export const SequenceStepSchema = Type.Union([
+	Type.Object({
+		kind: Type.Literal("button"),
+		button: NdsButtonSchema,
+		hold_ms: Type.Optional(Type.Integer({ minimum: 0, maximum: 5000 })),
+		repeat_count: Type.Optional(Type.Integer({ minimum: 1, maximum: 50 })),
+		repeat_interval_ms: Type.Optional(Type.Integer({ minimum: 10, maximum: 2000 })),
+	}),
+	Type.Object({
+		kind: Type.Literal("touch"),
+		x: Type.Integer({ minimum: 0, maximum: TOUCH_MAX_X }),
+		y: Type.Integer({ minimum: 0, maximum: TOUCH_MAX_Y }),
+		hold_ms: Type.Optional(Type.Integer({ minimum: 50, maximum: 5000 })),
+	}),
+	Type.Object({
+		kind: Type.Literal("touch_drag"),
+		from: TouchPointSchema,
+		to: TouchPointSchema,
+		duration_ms: Type.Integer({ minimum: 50, maximum: 3000 }),
+	}),
+	Type.Object({
+		kind: Type.Literal("wait"),
+		ms: Type.Integer({ minimum: 0, maximum: 10000 }),
+	}),
+]);
+
+export const SequenceSchema = Type.Object({
+	steps: Type.Array(SequenceStepSchema, { minItems: 1, maxItems: SEQUENCE_MAX_STEPS }),
 });
 
 // DeSmuME 0.9.11 GTK supports save-state slots 1..10 (hotkeys F1..F10
@@ -39,7 +86,12 @@ export const SaveStateSchema = Type.Object({
 });
 
 export type ButtonRequest = Static<typeof ButtonSchema>;
+export type ButtonPressOptions = Omit<ButtonRequest, "button">;
 export type TouchRequest = Static<typeof TouchSchema>;
+export type TouchPoint = Static<typeof TouchPointSchema>;
+export type TouchDragRequest = Static<typeof TouchDragSchema>;
+export type SequenceStep = Static<typeof SequenceStepSchema>;
+export type SequenceRequest = Static<typeof SequenceSchema>;
 export type SaveStateRequest = Static<typeof SaveStateSchema>;
 
 export const BUTTON_KEY_MAP = {

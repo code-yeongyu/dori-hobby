@@ -52,6 +52,15 @@ const geometryOutput = (x: number, y: number, w: number, h: number): string => {
 	].join("\n");
 };
 
+const windowAndGeometryQueue = (windowId: string): readonly CommandResult[] => [
+	{ stdout: textBytes(`${windowId}\n`), stderr: "", code: 0 },
+	{
+		stdout: textBytes(geometryOutput(10, 10, 256, 490)),
+		stderr: "",
+		code: 0,
+	},
+];
+
 describe("DesmumeDriver", () => {
 	it("retries window lookup and caches window id", async () => {
 		const runner = new MockRunner([
@@ -76,14 +85,7 @@ describe("DesmumeDriver", () => {
 	// Canvas center: (10 + 128, 95 + 192) = (138, 287)
 	// Bottom half (within trimmed canvas) starts at canvas_y + 192 = 287.
 	it("presses a button with tap semantics (XTEST + sloppy focus)", async () => {
-		const runner = new MockRunner([
-			{ stdout: textBytes("100\n"), stderr: "", code: 0 },
-			{
-				stdout: textBytes(geometryOutput(10, 10, 256, 490)),
-				stderr: "",
-				code: 0,
-			},
-		]);
+		const runner = new MockRunner(windowAndGeometryQueue("100"));
 		const sleeps: number[] = [];
 		const driver = new DesmumeDriver(runner, async (ms: number) => {
 			sleeps.push(ms);
@@ -106,14 +108,7 @@ describe("DesmumeDriver", () => {
 	});
 
 	it("presses a button with hold semantics", async () => {
-		const runner = new MockRunner([
-			{ stdout: textBytes("100\n"), stderr: "", code: 0 },
-			{
-				stdout: textBytes(geometryOutput(10, 10, 256, 490)),
-				stderr: "",
-				code: 0,
-			},
-		]);
+		const runner = new MockRunner(windowAndGeometryQueue("100"));
 		const sleeps: number[] = [];
 		const driver = new DesmumeDriver(runner, async (ms: number) => {
 			sleeps.push(ms);
@@ -136,15 +131,39 @@ describe("DesmumeDriver", () => {
 		]);
 	});
 
-	it("maps touch coordinates into root coordinates via XTEST", async () => {
-		const runner = new MockRunner([
-			{ stdout: textBytes("777\n"), stderr: "", code: 0 },
-			{
-				stdout: textBytes(geometryOutput(10, 10, 256, 490)),
-				stderr: "",
-				code: 0,
-			},
+	it("presses a repeated button with gaps between taps", async () => {
+		const runner = new MockRunner(windowAndGeometryQueue("100"));
+		const sleeps: number[] = [];
+		const driver = new DesmumeDriver(runner, async (ms: number) => {
+			sleeps.push(ms);
+		});
+
+		await driver.pressButton("A", { repeat_count: 3, repeat_interval_ms: 50 });
+
+		expect(runner.calls).toEqual([
+			{ cmd: "xdotool", args: [...SEARCH_ARGS], input: undefined },
+			{ cmd: "xwininfo", args: ["-id", "100"], input: undefined },
+			{ cmd: "xdotool", args: ["mousemove", "138", "287"], input: undefined },
+			{ cmd: "xdotool", args: ["windowactivate", "--sync", "100"], input: undefined },
+			{ cmd: "xdotool", args: ["key", "x"], input: undefined },
+			{ cmd: "xdotool", args: ["key", "x"], input: undefined },
+			{ cmd: "xdotool", args: ["key", "x"], input: undefined },
 		]);
+		expect(sleeps).toEqual([50, 50, 50]);
+	});
+
+	it("rejects mixing hold and repeat button semantics", async () => {
+		const runner = new MockRunner([]);
+		const driver = new DesmumeDriver(runner, async () => {});
+
+		await expect(driver.pressButton("A", { hold_ms: 100, repeat_count: 3 })).rejects.toThrow(
+			"hold_ms and repeat_count are mutually exclusive",
+		);
+		expect(runner.calls).toEqual([]);
+	});
+
+	it("maps touch coordinates into root coordinates via XTEST", async () => {
+		const runner = new MockRunner(windowAndGeometryQueue("777"));
 		const sleeps: number[] = [];
 		const driver = new DesmumeDriver(runner, async (ms: number) => {
 			sleeps.push(ms);
@@ -173,6 +192,62 @@ describe("DesmumeDriver", () => {
 		expect(sleeps).toEqual([50, 80]);
 	});
 
+	it("uses custom touch hold duration", async () => {
+		const runner = new MockRunner(windowAndGeometryQueue("777"));
+		const sleeps: number[] = [];
+		const driver = new DesmumeDriver(runner, async (ms: number) => {
+			sleeps.push(ms);
+		});
+
+		await driver.touch(10, 20, 300);
+
+		expect(runner.calls.slice(-3)).toEqual([
+			{ cmd: "xdotool", args: ["mousemove", "20", "307"], input: undefined },
+			{ cmd: "xdotool", args: ["mousedown", "1"], input: undefined },
+			{ cmd: "xdotool", args: ["mouseup", "1"], input: undefined },
+		]);
+		expect(sleeps).toEqual([50, 300]);
+	});
+
+	it("drags touch input across interpolated bottom-screen points", async () => {
+		const runner = new MockRunner(windowAndGeometryQueue("777"));
+		const driver = new DesmumeDriver(runner, async () => {});
+
+		await driver.touchDrag({ x: 10, y: 10 }, { x: 200, y: 150 }, 200);
+
+		const mouseMoves = runner.calls.filter((call) => call.cmd === "xdotool" && call.args[0] === "mousemove");
+		expect(mouseMoves.at(1)).toEqual({ cmd: "xdotool", args: ["mousemove", "20", "297"], input: undefined });
+		expect(mouseMoves.at(-1)).toEqual({ cmd: "xdotool", args: ["mousemove", "210", "437"], input: undefined });
+		expect(mouseMoves.length).toBeGreaterThanOrEqual(7);
+		expect(runner.calls.at(-1)).toEqual({ cmd: "xdotool", args: ["mouseup", "1"], input: undefined });
+	});
+
+	it("runs a sequence with one initial focus", async () => {
+		const runner = new MockRunner(windowAndGeometryQueue("100"));
+		const sleeps: number[] = [];
+		const driver = new DesmumeDriver(runner, async (ms: number) => {
+			sleeps.push(ms);
+		});
+
+		await driver.runSequence([
+			{ kind: "button", button: "A" },
+			{ kind: "wait", ms: 100 },
+			{ kind: "touch", x: 50, y: 50 },
+		]);
+
+		expect(runner.calls).toEqual([
+			{ cmd: "xdotool", args: [...SEARCH_ARGS], input: undefined },
+			{ cmd: "xwininfo", args: ["-id", "100"], input: undefined },
+			{ cmd: "xdotool", args: ["mousemove", "138", "287"], input: undefined },
+			{ cmd: "xdotool", args: ["windowactivate", "--sync", "100"], input: undefined },
+			{ cmd: "xdotool", args: ["key", "x"], input: undefined },
+			{ cmd: "xdotool", args: ["mousemove", "60", "337"], input: undefined },
+			{ cmd: "xdotool", args: ["mousedown", "1"], input: undefined },
+			{ cmd: "xdotool", args: ["mouseup", "1"], input: undefined },
+		]);
+		expect(sleeps).toEqual([50, 100, 80]);
+	});
+
 	it("rejects touch coordinates outside DS bounds", async () => {
 		const runner = new MockRunner([{ stdout: textBytes("777\n"), stderr: "", code: 0 }]);
 		const driver = new DesmumeDriver(runner, async () => {});
@@ -184,12 +259,7 @@ describe("DesmumeDriver", () => {
 
 	it("captures the cropped game canvas as base64 PNG", async () => {
 		const runner = new MockRunner([
-			{ stdout: textBytes("555\n"), stderr: "", code: 0 },
-			{
-				stdout: textBytes(geometryOutput(10, 10, 256, 490)),
-				stderr: "",
-				code: 0,
-			},
+			...windowAndGeometryQueue("555"),
 			{ stdout: Uint8Array.of(137, 80, 78, 71), stderr: "", code: 0 },
 		]);
 		const driver = new DesmumeDriver(runner, async () => {});

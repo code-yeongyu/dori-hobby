@@ -2,11 +2,16 @@ import { Value } from "@sinclair/typebox/value";
 import { Hono } from "hono";
 
 import { type CommandResult, type CommandRunner, DesmumeDriver } from "./desmume-driver.js";
+import { resolveButtonPressOptions } from "./input-options.js";
 import {
 	type ButtonRequest,
 	ButtonSchema,
 	type SaveStateRequest,
 	SaveStateSchema,
+	type SequenceRequest,
+	SequenceSchema,
+	type TouchDragRequest,
+	TouchDragSchema,
 	type TouchRequest,
 	TouchSchema,
 } from "./types.js";
@@ -72,9 +77,14 @@ export const buildApp = (driver: DesmumeDriver) => {
 		} catch {
 			return context.json({ ok: false, error: "invalid button payload" }, 400);
 		}
+		try {
+			resolveButtonPressOptions(payload);
+		} catch (error) {
+			return context.json({ ok: false, error: toErrorMessage(error) }, 400);
+		}
 
 		try {
-			await driver.pressButton(payload.button, payload.hold_ms);
+			await driver.pressButton(payload.button, payload);
 			return context.json({ ok: true });
 		} catch (error) {
 			return context.json({ ok: false, error: toErrorMessage(error) }, 503);
@@ -91,7 +101,41 @@ export const buildApp = (driver: DesmumeDriver) => {
 		}
 
 		try {
-			await driver.touch(payload.x, payload.y);
+			await driver.touch(payload.x, payload.y, payload.hold_ms);
+			return context.json({ ok: true });
+		} catch (error) {
+			return context.json({ ok: false, error: toErrorMessage(error) }, 503);
+		}
+	});
+
+	app.post("/touch-drag", async (context) => {
+		const body = await context.req.json();
+		let payload: TouchDragRequest;
+		try {
+			payload = Value.Parse(TouchDragSchema, body);
+		} catch {
+			return context.json({ ok: false, error: "invalid touch-drag payload" }, 400);
+		}
+
+		try {
+			await driver.touchDrag(payload.from, payload.to, payload.duration_ms);
+			return context.json({ ok: true });
+		} catch (error) {
+			return context.json({ ok: false, error: toErrorMessage(error) }, 503);
+		}
+	});
+
+	app.post("/sequence", async (context) => {
+		const body = await context.req.json();
+		let payload: SequenceRequest;
+		try {
+			payload = Value.Parse(SequenceSchema, body);
+		} catch {
+			return context.json({ ok: false, error: "invalid sequence payload" }, 400);
+		}
+
+		try {
+			await driver.runSequence(payload.steps);
 			return context.json({ ok: true });
 		} catch (error) {
 			return context.json({ ok: false, error: toErrorMessage(error) }, 503);

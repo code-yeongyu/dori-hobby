@@ -12,6 +12,15 @@ type RunCall = {
 
 const jsonHeaders = { "content-type": "application/json" };
 const textBytes = (value: string): Uint8Array => new TextEncoder().encode(value);
+type BridgeApp = ReturnType<typeof buildApp>;
+
+const postJsonRequest = async (app: BridgeApp, path: string, body: unknown): Promise<Response> => {
+	return await app.request(path, {
+		method: "POST",
+		headers: jsonHeaders,
+		body: JSON.stringify(body),
+	});
+};
 
 class MockRunner implements CommandRunner {
 	public readonly calls: RunCall[] = [];
@@ -72,11 +81,7 @@ describe("input-bridge HTTP server", () => {
 			const runner = new MockRunner([{ stdout: textBytes("9001\n"), stderr: "", code: 0 }, geometryResult]);
 			const { app } = setup(runner, async () => {});
 
-			const response = await app.request("/button", {
-				method: "POST",
-				headers: jsonHeaders,
-				body: JSON.stringify({ button }),
-			});
+			const response = await postJsonRequest(app, "/button", { button });
 
 			expect(response.status).toBe(200);
 			await expect(response.json()).resolves.toEqual({ ok: true });
@@ -97,11 +102,7 @@ describe("input-bridge HTTP server", () => {
 		const runner = new MockRunner([]);
 		const { app } = setup(runner, async () => {});
 
-		const response = await app.request("/button", {
-			method: "POST",
-			headers: jsonHeaders,
-			body: JSON.stringify({ button: "Invalid" }),
-		});
+		const response = await postJsonRequest(app, "/button", { button: "Invalid" });
 
 		expect(response.status).toBe(400);
 	});
@@ -115,11 +116,7 @@ describe("input-bridge HTTP server", () => {
 			const runner = new MockRunner([{ stdout: textBytes("300\n"), stderr: "", code: 0 }, geometryResult]);
 			const { app } = setup(runner, async () => {});
 
-			const response = await app.request("/touch", {
-				method: "POST",
-				headers: jsonHeaders,
-				body: JSON.stringify(point),
-			});
+			const response = await postJsonRequest(app, "/touch", point);
 
 			expect(response.status).toBe(200);
 			await expect(response.json()).resolves.toEqual({ ok: true });
@@ -137,11 +134,7 @@ describe("input-bridge HTTP server", () => {
 		];
 
 		for (const payload of invalidPayloads) {
-			const response = await app.request("/touch", {
-				method: "POST",
-				headers: jsonHeaders,
-				body: JSON.stringify(payload),
-			});
+			const response = await postJsonRequest(app, "/touch", payload);
 
 			expect(response.status).toBe(400);
 		}
@@ -172,11 +165,7 @@ describe("input-bridge HTTP server", () => {
 			sleeps.push(ms);
 		});
 
-		const response = await app.request("/button", {
-			method: "POST",
-			headers: jsonHeaders,
-			body: JSON.stringify({ button: "A", hold_ms: 500 }),
-		});
+		const response = await postJsonRequest(app, "/button", { button: "A", hold_ms: 500 });
 
 		expect(response.status).toBe(200);
 		// First sleep (50ms) is the focus settle after windowactivate; second is the hold.
@@ -191,18 +180,81 @@ describe("input-bridge HTTP server", () => {
 		]);
 	});
 
-	it("saves state via /save-state -> Shift+F<slot>", async () => {
-		const runner = new MockRunner([
-			{ stdout: textBytes("400\n"), stderr: "", code: 0 },
-			geometryResult,
-		]);
+	it("repeats button presses via /button", async () => {
+		const runner = new MockRunner([{ stdout: textBytes("300\n"), stderr: "", code: 0 }, geometryResult]);
 		const { app } = setup(runner, async () => {});
 
-		const response = await app.request("/save-state", {
-			method: "POST",
-			headers: jsonHeaders,
-			body: JSON.stringify({ slot: 1 }),
+		const response = await postJsonRequest(app, "/button", {
+			button: "A",
+			repeat_count: 3,
+			repeat_interval_ms: 50,
 		});
+
+		expect(response.status).toBe(200);
+		expect(runner.calls.filter((call) => call.args[0] === "key")).toHaveLength(3);
+	});
+
+	it("rejects hold plus repeat via /button", async () => {
+		const runner = new MockRunner([]);
+		const { app } = setup(runner, async () => {});
+
+		const response = await postJsonRequest(app, "/button", { button: "A", hold_ms: 100, repeat_count: 3 });
+
+		expect(response.status).toBe(400);
+		await expect(response.json()).resolves.toEqual({
+			ok: false,
+			error: "hold_ms and repeat_count are mutually exclusive",
+		});
+	});
+
+	it("handles valid and invalid /touch-drag payloads", async () => {
+		const runner = new MockRunner([{ stdout: textBytes("300\n"), stderr: "", code: 0 }, geometryResult]);
+		const { app } = setup(runner, async () => {});
+
+		const valid = await postJsonRequest(app, "/touch-drag", {
+			from: { x: 10, y: 10 },
+			to: { x: 200, y: 150 },
+			duration_ms: 200,
+		});
+		expect(valid.status).toBe(200);
+
+		for (const payload of [
+			{ from: { x: 10, y: 10 }, to: { x: 200, y: 150 }, duration_ms: 49 },
+			{ from: { x: 256, y: 10 }, to: { x: 200, y: 150 }, duration_ms: 200 },
+		]) {
+			const response = await postJsonRequest(app, "/touch-drag", payload);
+			expect(response.status).toBe(400);
+		}
+	});
+
+	it("runs mixed /sequence steps and rejects over-cap batches", async () => {
+		const runner = new MockRunner([{ stdout: textBytes("300\n"), stderr: "", code: 0 }, geometryResult]);
+		const sleeps: number[] = [];
+		const { app } = setup(runner, async (ms: number) => {
+			sleeps.push(ms);
+		});
+
+		const response = await postJsonRequest(app, "/sequence", {
+			steps: [
+				{ kind: "button", button: "A" },
+				{ kind: "wait", ms: 100 },
+				{ kind: "touch", x: 50, y: 50 },
+			],
+		});
+
+		expect(response.status).toBe(200);
+		expect(sleeps).toEqual([50, 100, 80]);
+
+		const tooMany = Array.from({ length: 50 }, () => ({ kind: "button", button: "A" }));
+		const rejected = await postJsonRequest(app, "/sequence", { steps: tooMany });
+		expect(rejected.status).toBe(400);
+	});
+
+	it("saves state via /save-state -> Shift+F<slot>", async () => {
+		const runner = new MockRunner([{ stdout: textBytes("400\n"), stderr: "", code: 0 }, geometryResult]);
+		const { app } = setup(runner, async () => {});
+
+		const response = await postJsonRequest(app, "/save-state", { slot: 1 });
 
 		expect(response.status).toBe(200);
 		await expect(response.json()).resolves.toEqual({ ok: true, slot: 1 });
@@ -215,17 +267,10 @@ describe("input-bridge HTTP server", () => {
 	});
 
 	it("loads state via /load-state -> F<slot>", async () => {
-		const runner = new MockRunner([
-			{ stdout: textBytes("400\n"), stderr: "", code: 0 },
-			geometryResult,
-		]);
+		const runner = new MockRunner([{ stdout: textBytes("400\n"), stderr: "", code: 0 }, geometryResult]);
 		const { app } = setup(runner, async () => {});
 
-		const response = await app.request("/load-state", {
-			method: "POST",
-			headers: jsonHeaders,
-			body: JSON.stringify({ slot: 3 }),
-		});
+		const response = await postJsonRequest(app, "/load-state", { slot: 3 });
 
 		expect(response.status).toBe(200);
 		await expect(response.json()).resolves.toEqual({ ok: true, slot: 3 });
@@ -240,11 +285,7 @@ describe("input-bridge HTTP server", () => {
 		const { app } = setup(runner, async () => {});
 
 		for (const slot of [0, 11, -1]) {
-			const response = await app.request("/save-state", {
-				method: "POST",
-				headers: jsonHeaders,
-				body: JSON.stringify({ slot }),
-			});
+			const response = await postJsonRequest(app, "/save-state", { slot });
 			expect(response.status).toBe(400);
 		}
 	});
@@ -257,11 +298,7 @@ describe("input-bridge HTTP server", () => {
 		]);
 		const { app } = setup(runner, async () => {});
 
-		const response = await app.request("/button", {
-			method: "POST",
-			headers: jsonHeaders,
-			body: JSON.stringify({ button: "A" }),
-		});
+		const response = await postJsonRequest(app, "/button", { button: "A" });
 
 		expect(response.status).toBe(503);
 		await expect(response.json()).resolves.toEqual({ ok: false, error: "desmume window not found" });
