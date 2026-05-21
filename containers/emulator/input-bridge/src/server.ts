@@ -1,5 +1,6 @@
 import { buildApp } from "./app.js";
 import { type CommandResult, type CommandRunner, DesmumeDriver } from "./desmume-driver.js";
+import { createPlaytimeFileStorage, PlaytimeTracker } from "./playtime.js";
 
 const readBytes = async (stream: ReadableStream<Uint8Array> | null): Promise<Uint8Array> => {
 	if (stream === null) {
@@ -44,9 +45,21 @@ export { buildApp } from "./app.js";
 
 if (import.meta.main) {
 	const driver = new DesmumeDriver(createBunRunner());
-	const app = buildApp(driver);
+	const playtime = new PlaytimeTracker({
+		clock: () => Date.now(),
+		storage: createPlaytimeFileStorage("/root/.config/desmume/playtime.json"),
+		tickIntervalMs: 30_000,
+	});
+	await playtime.start();
+	const app = buildApp(driver, playtime);
 	const port = 7878;
 	console.log(`[input-bridge] listening on :${port}`);
+
+	const shutdown = (): void => {
+		void playtime.stop().finally(() => process.exit(0));
+	};
+	process.once("SIGINT", shutdown);
+	process.once("SIGTERM", shutdown);
 
 	Bun.serve({ port, fetch: app.fetch });
 }
