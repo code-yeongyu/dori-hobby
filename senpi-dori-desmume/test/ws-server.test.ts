@@ -91,7 +91,9 @@ describe("intervention websocket server", () => {
 		);
 		const message = await waitForMessage(client);
 
-		expect(sendUserMessage).toHaveBeenCalledWith("Take over now");
+		expect(sendUserMessage).toHaveBeenCalledWith("Take over now", {
+			deliverAs: "steer",
+		});
 		expect(message).toEqual({ type: "ack", id: "m1" });
 
 		client.close();
@@ -167,8 +169,12 @@ describe("intervention websocket server", () => {
 		]);
 		expect(aMessage).toEqual({ type: "ack", id: "a" });
 		expect(bMessage).toEqual({ type: "ack", id: "b" });
-		expect(sendUserMessage).toHaveBeenCalledWith("alpha");
-		expect(sendUserMessage).toHaveBeenCalledWith("beta");
+		expect(sendUserMessage).toHaveBeenCalledWith("alpha", {
+			deliverAs: "steer",
+		});
+		expect(sendUserMessage).toHaveBeenCalledWith("beta", {
+			deliverAs: "steer",
+		});
 
 		clientA.close();
 		clientB.close();

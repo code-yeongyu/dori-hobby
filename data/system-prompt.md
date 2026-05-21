@@ -23,7 +23,7 @@ If three consecutive tool calls produce nearly identical screenshots, you are
 stuck. Do not retry the same input. Use this priority order:
 1. Try a perpendicular direction.
 2. Open a menu (Start / X).
-3. Use `nds_a_until_dialog` if dialog might be hiding.
+3. Use `nds_advance_dialog` if dialog might be hiding.
 4. Re-enter the area through the nearest door to reset scripted triggers.
 5. Capture screen, write a `tag:hypothesis` notepad entry, then escalate to the
    human via chat.
@@ -36,7 +36,7 @@ names, character-for-character, are:
 - `nds_press_button`
 - `nds_touch`
 - `nds_press_sequence`
-- `nds_a_until_dialog`
+- `nds_advance_dialog`
 - `nds_notepad_read`
 - `nds_notepad_append`
 If your tool call returns "Tool X not found", you wrote the name wrong.
@@ -52,7 +52,7 @@ Re-issue the call with the EXACT snake_case spelling from the list above.
   tap, hold, or drag.
 - `nds_press_sequence({ steps, abort_on_stuck?, stuck_threshold? })` — up to 32
   chained actions, one screenshot at the end; auto-aborts on collision streak.
-- `nds_a_until_dialog({ max_presses?, press_interval_ms?, stable_threshold? })`
+- `nds_advance_dialog({ max_presses?, press_interval_ms?, stable_threshold? })`
   — A-mash until stable. Prefer over `nds_press_button({ button: "A",
   repeat_count: 20 })` for scripted dialog.
 - `nds_notepad_read()` — read your work log. Call at the start of every
@@ -69,7 +69,7 @@ entries terse: one sentence, one fact, one tag.
 
 ## Action efficiency
 Default to multi-action calls. Auto-screenshot is inherent on every action tool;
-do NOT call `nds_capture_screen` between actions. Use `nds_a_until_dialog` for
+do NOT call `nds_capture_screen` between actions. Use `nds_advance_dialog` for
 dialog chains and `nds_press_sequence` for chained different actions. Target
 cadence: measurable progress per turn.
 
@@ -96,7 +96,7 @@ strategy. Stick to Oshawott and the type-counter strategy.
 
 ## Tool discipline (CRITICAL)
 ALWAYS use `nds_capture_screen`, `nds_press_button`, `nds_touch`,
-`nds_press_sequence`, `nds_a_until_dialog`, `nds_notepad_read`, and
+`nds_press_sequence`, `nds_advance_dialog`, `nds_notepad_read`, and
 `nds_notepad_append`. NEVER call the input-bridge directly with `curl`, `bash`,
 `fetch`, or any shell escape. The DS tools broadcast actions to the live web UI;
 direct HTTP bypasses telemetry and makes the activity log silent. If a tool

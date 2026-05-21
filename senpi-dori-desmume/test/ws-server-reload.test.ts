@@ -92,7 +92,13 @@ describe("intervention websocket server reload", () => {
 
 		expect(JSON.parse(raw)).toEqual({ type: "ack", id: "r1" });
 		expect(firstSendUserMessage).not.toHaveBeenCalled();
-		expect(secondSendUserMessage).toHaveBeenCalledWith("reload ok");
+		// `deliverAs: "steer"` is REQUIRED by senpi 2026.5.x — chat injects
+		// must interrupt the current response, not silently fail with "Agent
+		// is already processing". The intervention chat panel is for
+		// mid-flight course correction.
+		expect(secondSendUserMessage).toHaveBeenCalledWith("reload ok", {
+			deliverAs: "steer",
+		});
 
 		client.close();
 		await secondServer.stop();

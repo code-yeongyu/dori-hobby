@@ -29,12 +29,20 @@ const parseBridgeResponse = (
 };
 
 export const aUntilDialogTool = defineTool({
-	name: "nds_a_until_dialog",
+	// ccapi-cf proxy (request-transformer.ts) converts snake_case tool
+	// names to PascalCase on the way to Anthropic. `nds_a_until_dialog`
+	// becomes `NdsAUntilDialog` — and that name has the `AU` substring,
+	// which trips ccapi's `isPurePascalCase` heuristic (`/[A-Z]{2}/`).
+	// The response-side reverse transform is then SKIPPED, so senpi
+	// receives `NdsAUntilDialog` literally and looks up a tool it does
+	// not have, logging `Tool NdsAUntilDialog not found` to every chat.
+	// Rename to a form whose Pascal projection has no adjacent caps.
+	name: "nds_advance_dialog",
 	label: "NDS A Until Dialog Stable",
 	description:
 		"Press A repeatedly until post-press screenshots stabilize. Always auto-returns a fresh post-action screenshot.",
 	promptSnippet:
-		"nds_a_until_dialog({ max_presses?: 1..200, press_interval_ms?: 50..2000, stable_threshold?: 1..10 }): A-mash through scripted dialog until the screen stabilizes, then returns the screenshot.",
+		"nds_advance_dialog({ max_presses?: 1..200, press_interval_ms?: 50..2000, stable_threshold?: 1..10 }): A-mash through scripted dialog until the screen stabilizes, then returns the screenshot. (Was nds_a_until_dialog — renamed to avoid a ccapi proxy snake→Pascal reverse-transform bug.)",
 	promptGuidelines: [
 		"Prefer this over nds_press_button({ button: 'A', repeat_count: 20 }) for scripted dialog mashing.",
 		"Use defaults first. Lower max_presses only when you know the dialog is short.",

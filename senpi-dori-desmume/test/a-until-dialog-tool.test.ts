@@ -22,7 +22,7 @@ function makeResponse(body: unknown, status = 200): Response {
 	});
 }
 
-describe("nds_a_until_dialog tool", () => {
+describe("nds_advance_dialog tool (was nds_a_until_dialog, renamed for ccapi proxy quirk)", () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 		fetchMock.mockReset();
