@@ -44,7 +44,7 @@ PROVIDER="${DORI_PROVIDER:-anthropic}"
 # does not host opus-4.7 yet, so we route directly through ccapi.
 MODEL="${DORI_MODEL:-claude-opus-4-7}"
 THINKING="${DORI_THINKING:-max}"
-TOOLS="${DORI_TOOLS:-nds_capture_screen,nds_press_button,nds_touch,nds_press_sequence,nds_a_until_dialog,NdsAUntilDialog,nds_notepad_read,nds_notepad_append}"
+TOOLS="${DORI_TOOLS:-nds_capture_screen,nds_press_button,nds_touch,nds_press_sequence,nds_a_until_dialog,nds_notepad_read,nds_notepad_append}"
 ANTHROPIC_COMPUTER_USE_BETA="${DORI_ANTHROPIC_COMPUTER_USE_BETA:-computer-use-2025-11-24}"
 OPENAI_COMPUTER_USE_MODEL="${DORI_OPENAI_COMPUTER_USE_MODEL:-gpt-5.4}"
 
