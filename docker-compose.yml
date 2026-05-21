@@ -4,7 +4,7 @@
 #   - mediamtx   : RTSP ingestion + WebRTC/WHEP out + recording
 #   - web-ui     : Hono backend + React frontend (serves dist/)
 # The senpi agent runs on the HOST (not in compose) and reaches:
-#   - emulator via localhost:7878 (port-forwarded)
+#   - emulator via localhost:8787 (port-forwarded)
 #   - mediamtx via localhost:8889 (WebRTC) and :9996 (API)
 # The web-ui container reaches the host's senpi process via host.docker.internal:7979.
 
@@ -18,7 +18,7 @@ services:
     image: dori-hobby/emulator:dev
     container_name: dori-emulator
     ports:
-      - "7878:7878"
+      - "8787:8787"
     volumes:
       # rw needed so entrypoint can drop <rom-basename>.dct alongside the
       # ROM for DeSmuME's auto-cheat-load. ROM file itself is gitignored
@@ -36,6 +36,7 @@ services:
       CHEATS_PATH: "/app/cheats/pokemon-white-us.dct"
       CONFIG_PATH: "/app/config/desmume.ini"
       MEDIAMTX_RTSP_URL: "rtsp://mediamtx:8554/dori"
+      INPUT_BRIDGE_PORT: "8787"
     depends_on:
       mediamtx:
         condition: service_started
@@ -75,6 +76,7 @@ services:
       SENPI_WS_HOST: "host.docker.internal"
       SENPI_WS_PORT: "7979"
       MEDIAMTX_WHEP: "http://mediamtx:8889/dori/whep"
+      EMULATOR_PLAYTIME_URL: "http://emulator:8787/playtime"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

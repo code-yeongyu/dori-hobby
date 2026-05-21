@@ -10,7 +10,7 @@ attaching a ROM or running the agent.
 3. Wait 30s
 4. `curl http://localhost:3001/health` → 200 `{"status":"ok",...}`
 5. `curl http://localhost:9996/v3/paths/list` → 200 JSON
-6. `curl http://localhost:7878/health` → 200 OR 503 (acceptable without
+6. `curl http://localhost:8787/health` → 200 OR 503 (acceptable without
    ROM; 503 means DeSmuME hasn't launched a game yet)
 7. `docker compose ps` → all 3 "Up"
 8. `docker compose logs --tail=50` → no crash/OOM
@@ -26,7 +26,7 @@ attaching a ROM or running the agent.
 | 3 | 30s warm-up | n/a | Waited 30 seconds before checks. |
 | 4 | `curl http://localhost:3001/health` → 200 | ✓ PASS | `{"status":"ok","uptime":51.839212691}` |
 | 5 | `curl http://localhost:9996/v3/paths/list` → 200 | ✓ PASS | 200 JSON with online `dori` path, H264 track present. |
-| 6 | `curl http://localhost:7878/health` → 200 or 503 | ✓ PASS (200) | `{"status":"ok"}`; no-ROM mode still allowed. |
+| 6 | `curl http://localhost:8787/health` → 200 or 503 | ✓ PASS (200) | `{"status":"ok"}`; no-ROM mode still allowed. |
 | 7 | `docker compose ps` all "Up" | ✓ PASS | All three services in `Up` state. |
 | 8 | `docker compose logs` no crash loop | ✓ PASS | No crash loops or OOMs; only expected ROM-missing warning in emulator logs. |
 | 9 | `curl http://localhost:3001/` → 200 HTML | ✓ PASS | 200 HTML includes `<title>dori-hobby · live</title>`. |

@@ -39,12 +39,10 @@ test.describe("dori-hobby web UI — smoke", () => {
     ).toBeVisible({ timeout: 5000 });
   });
 
-  test("status bar shows 3 pills (emulator, stream, agent)", async ({
-    page,
-  }) => {
+  test("status bar shows 4 pills including playtime", async ({ page }) => {
     await page.goto("/");
     const pills = page.locator(".status-cell .pill");
-    await expect(pills).toHaveCount(3);
+    await expect(pills).toHaveCount(4);
   });
 
   test("mobile viewport stacks layout vertically", async ({ page }) => {

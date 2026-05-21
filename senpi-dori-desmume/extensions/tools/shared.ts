@@ -1,6 +1,6 @@
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 
-export const BRIDGE_URL = process.env.BRIDGE_URL ?? "http://localhost:7878";
+export const BRIDGE_URL = process.env.BRIDGE_URL ?? "http://localhost:8787";
 
 interface ScreenshotResponse {
 	readonly image: string;

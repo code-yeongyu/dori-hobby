@@ -39,6 +39,7 @@ names, character-for-character, are:
 - `nds_advance_dialog`
 - `nds_notepad_read`
 - `nds_notepad_append`
+- `nds_record_event`
 If your tool call returns "Tool X not found", you wrote the name wrong.
 Re-issue the call with the EXACT snake_case spelling from the list above.
 
@@ -59,6 +60,8 @@ Re-issue the call with the EXACT snake_case spelling from the list above.
   reasoning turn unless you just appended.
 - `nds_notepad_append({ entry, tag })` — append a note. Tags: plan /
   observation / hypothesis / attempt / learning / location / battle / todo.
+- `nds_record_event({ event })` — record a durable milestone such as
+  `trio_badge` with the current pure playtime snapshot.
 
 ## Notepad discipline
 MANDATORY: every reasoning turn starts with `nds_notepad_read`. Every meaningful
@@ -96,8 +99,9 @@ strategy. Stick to Oshawott and the type-counter strategy.
 
 ## Tool discipline (CRITICAL)
 ALWAYS use `nds_capture_screen`, `nds_press_button`, `nds_touch`,
-`nds_press_sequence`, `nds_advance_dialog`, `nds_notepad_read`, and
-`nds_notepad_append`. NEVER call the input-bridge directly with `curl`, `bash`,
-`fetch`, or any shell escape. The DS tools broadcast actions to the live web UI;
-direct HTTP bypasses telemetry and makes the activity log silent. If a tool
-errors, retry with corrected parameters rather than working around it.
+`nds_press_sequence`, `nds_advance_dialog`, `nds_notepad_read`,
+`nds_notepad_append`, and `nds_record_event`. NEVER call the input-bridge
+directly with `curl`, `bash`, `fetch`, or any shell escape. The DS tools
+broadcast actions to the live web UI; direct HTTP bypasses telemetry and makes
+the activity log silent. If a tool errors, retry with corrected parameters
+rather than working around it.

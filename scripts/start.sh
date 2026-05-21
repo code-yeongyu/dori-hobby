@@ -50,7 +50,7 @@ wait_for() {
 wait_for "web-ui"  "http://localhost:3001/health"          || true
 wait_for "mediamtx" "http://localhost:9996/v3/paths/list"  || true
 # input-bridge may take longer if DeSmuME has to launch
-wait_for "input-bridge" "http://localhost:7878/health"     || true
+wait_for "input-bridge" "http://localhost:8787/health"     || true
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
@@ -58,7 +58,7 @@ echo "  dori-hobby is live"
 echo "═══════════════════════════════════════════════════════════════"
 echo "  Web UI:      http://localhost:3001"
 echo "  WebRTC:      http://localhost:8889/dori/whep"
-echo "  Bridge:      http://localhost:7878"
+echo "  Bridge:      http://localhost:8787"
 echo "  MediaMTX API: http://localhost:9996"
 echo ""
 echo "  Next: start senpi on the host with the senpi-dori-desmume extension:"

@@ -239,6 +239,7 @@ OUT_H=$(( CAP_H * 2 ))
 FFMPEG_PID=$!
 
 # --- 5. Start input-bridge ---
-echo "[entrypoint] starting input-bridge on :7878..."
+export INPUT_BRIDGE_PORT="${INPUT_BRIDGE_PORT:-8787}"
+echo "[entrypoint] starting input-bridge on :${INPUT_BRIDGE_PORT}..."
 cd /app/input-bridge
 exec bun run src/server.ts

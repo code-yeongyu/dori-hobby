@@ -1,6 +1,6 @@
 import { buildApp } from "./app.js";
 import { type CommandResult, type CommandRunner, DesmumeDriver } from "./desmume-driver.js";
-import { createPlaytimeFileStorage, PlaytimeTracker } from "./playtime.js";
+import { EpochMs, PlaytimeTracker, startPlaytimeTickLoop, TickMilliseconds } from "./playtime-tracker.js";
 
 const readBytes = async (stream: ReadableStream<Uint8Array> | null): Promise<Uint8Array> => {
 	if (stream === null) {
@@ -45,21 +45,41 @@ export { buildApp } from "./app.js";
 
 if (import.meta.main) {
 	const driver = new DesmumeDriver(createBunRunner());
+	const tickIntervalMs = TickMilliseconds.from(Number(process.env.PLAYTIME_TICK_MS ?? 30_000));
 	const playtime = new PlaytimeTracker({
-		clock: () => Date.now(),
-		storage: createPlaytimeFileStorage("/root/.config/desmume/playtime.json"),
-		tickIntervalMs: 30_000,
+		clock: EpochMs.now,
+		statePath: "/root/.config/desmume/playtime.json",
+		eventsPath: "/root/.config/desmume/playtime-events.json",
+		tickIntervalMs,
 	});
-	await playtime.start();
+	const playtimeAbort = new AbortController();
+	if (process.env.NODE_ENV !== "test" && process.env.PLAYTIME_DISABLE_TICK !== "1") {
+		startPlaytimeTickLoop({
+			signal: playtimeAbort.signal,
+			tickIntervalMs,
+			tick: async () => {
+				await playtime.tick();
+			},
+		});
+	}
 	const app = buildApp(driver, playtime);
-	const port = 7878;
+	const port = Number(process.env.INPUT_BRIDGE_PORT ?? 8787);
 	console.log(`[input-bridge] listening on :${port}`);
+	const server = Bun.serve({ port, fetch: app.fetch });
 
 	const shutdown = (): void => {
-		void playtime.stop().finally(() => process.exit(0));
+		playtimeAbort.abort();
+		void playtime
+			.tick()
+			.catch((error: unknown) => {
+				const message = error instanceof Error ? error.message : String(error);
+				console.error(`[playtime] final tick failed: ${message}`);
+			})
+			.finally(() => {
+				server.stop(true);
+				process.exit(0);
+			});
 	};
 	process.once("SIGINT", shutdown);
 	process.once("SIGTERM", shutdown);
-
-	Bun.serve({ port, fetch: app.fetch });
 }

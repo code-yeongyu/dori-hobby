@@ -30,6 +30,9 @@ export const App = (): JSX.Element => {
   const [chatRows, setChatRows] = useState<readonly ChatRow[]>([]);
   const [connection, setConnection] =
     useState<ChatConnectionState>("disconnected");
+  const [playtimeSeconds, setPlaytimeSeconds] = useState<number | undefined>(
+    undefined,
+  );
 
   // One WebSocket for the whole app. ChatPanel, ActivityLog, and the status
   // bar all consume from the same stream so we never duplicate connections.
@@ -98,6 +101,41 @@ export const App = (): JSX.Element => {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async (): Promise<void> => {
+      try {
+        const response = await fetch("/api/playtime", {
+          signal: AbortSignal.timeout(2000),
+        });
+        if (cancelled) {
+          return;
+        }
+        if (!response.ok) {
+          setPlaytimeSeconds(undefined);
+          return;
+        }
+        const nextSeconds = readPlaytimeSeconds(await response.json());
+        if (!cancelled) {
+          setPlaytimeSeconds(nextSeconds);
+        }
+      } catch (error) {
+        if (!(error instanceof Error)) {
+          throw error;
+        }
+        if (!cancelled) {
+          setPlaytimeSeconds(undefined);
+        }
+      }
+    };
+    void tick();
+    const interval = window.setInterval(tick, 10_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
   // The chat WS being "connected" only proves the bridge is alive, NOT that
   // senpi is running. The agent badge stays `idle` until we see an actual
   // agent-action or agent-thinking message on the wire.
@@ -146,10 +184,20 @@ export const App = (): JSX.Element => {
       </aside>
 
       <footer className="status-cell">
-        <StatusBar status={status} />
+        <StatusBar status={status} playtimeSeconds={playtimeSeconds} />
       </footer>
     </div>
   );
+};
+
+const readPlaytimeSeconds = (payload: unknown): number | undefined => {
+  if (typeof payload !== "object" || payload === null) {
+    return undefined;
+  }
+  const totalSeconds = Reflect.get(payload, "total_seconds");
+  return typeof totalSeconds === "number" && Number.isFinite(totalSeconds)
+    ? totalSeconds
+    : undefined;
 };
 
 const handleMessage = (

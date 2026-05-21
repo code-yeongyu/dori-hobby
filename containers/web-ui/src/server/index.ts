@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { createBunWebSocket, serveStatic } from "hono/bun";
 import type { ServerToClient } from "../shared/types.js";
 import { handleBunMessage, subscribeToUpstream } from "./chat-ws.js";
+import { playtimeProxy } from "./playtime-proxy.js";
 import { streamProxy } from "./stream-proxy.js";
 
 // `createBunWebSocket()` returns the `upgradeWebSocket` route helper
@@ -38,14 +39,15 @@ app.get("/health", (c) => {
 });
 
 app.route("/stream", streamProxy);
+app.route("/api", playtimeProxy);
 
-// Emulator health proxy: the browser can't reach :7878 directly (CORS +
+// Emulator health proxy: the browser can't reach :8787 directly (CORS +
 // container topology), so we expose a same-origin `/emulator/health` that
 // shells out to the input-bridge. Used by the client to drive the emulator
 // status pill instead of hard-coding `disconnected`.
 const emulatorBridgeUrl = (): string => {
   const host = process.env.EMULATOR_HOST ?? "emulator";
-  const port = Number(process.env.EMULATOR_PORT ?? 7878);
+  const port = Number(process.env.EMULATOR_PORT ?? 8787);
   return `http://${host}:${port}/health`;
 };
 

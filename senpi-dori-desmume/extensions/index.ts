@@ -11,12 +11,13 @@ import {
 	notepadReadTool,
 	pressButtonTool,
 	pressSequenceTool,
+	recordEventTool,
 	touchTool,
 } from "./tools/index.js";
 
 const DEFAULT_AUTOSAVE_INTERVAL_MS = 60_000;
 const DEFAULT_AUTOSAVE_SLOT = 1;
-const DEFAULT_BRIDGE_URL = "http://localhost:7878";
+const DEFAULT_BRIDGE_URL = "http://localhost:8787";
 
 async function saveStateToBridge(
 	bridgeUrl: string,
@@ -40,12 +41,13 @@ export default async function extension(pi: ExtensionAPI): Promise<void> {
 	pi.registerTool(notepadAppendTool);
 	pi.registerTool(pressButtonTool);
 	pi.registerTool(pressSequenceTool);
+	pi.registerTool(recordEventTool);
 	pi.registerTool(touchTool);
 
 	const interventionPort = Number(process.env.INTERVENTION_PORT ?? 7979);
 	const server = startInterventionServer(pi, interventionPort);
 	console.log(
-		`[senpi-dori-desmume] registered 7 tools + intervention WS on :${server.port}`,
+		`[senpi-dori-desmume] registered 8 tools + intervention WS on :${server.port}`,
 	);
 
 	// Forward Dori's reasoning/text stream into the activity log. senpi

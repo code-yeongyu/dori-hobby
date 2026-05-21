@@ -25,10 +25,10 @@ The system splits into three Docker services plus a host-side process:
    |  senpi process (Bun)                                 |
    |   + senpi-dori-desmume extension                     |
    |     - tools: nds_capture_screen, _press_button,    |
-   |              _touch  → HTTP to :7878                 |
+|              _touch  → HTTP to :8787                 |
    |     - intervention WS server → :7979                 |
    +------------------------------------------------------+
-         │ :7878 HTTP                ▲ :7979 WS
+│ :8787 HTTP                ▲ :7979 WS
          ▼                           │
    ┌─────────────────┐    ┌─────────────────────┐
    │ emulator        │    │ web-ui              │
@@ -53,7 +53,7 @@ The system splits into three Docker services plus a host-side process:
 
 | Service            | Port        | Proto   | Purpose                       |
 |--------------------|-------------|---------|-------------------------------|
-| input-bridge       | 7878        | HTTP    | button / touch / screenshot   |
+| input-bridge       | 8787        | HTTP    | button / touch / screenshot   |
 | senpi intervention | 7979        | WS      | chat → pi.sendUserMessage     |
 | web-ui HTTP        | 3001        | HTTP    | SPA + /health + /stream/whep  |
 | web-ui WS          | 3001/3002   | WS      | /chat → senpi intervention    |
@@ -64,7 +64,7 @@ The system splits into three Docker services plus a host-side process:
 
 ## Data flow
 
-- Agent decides → calls a senpi tool → tool HTTP-POSTs to input-bridge :7878.
+- Agent decides → calls a senpi tool → tool HTTP-POSTs to input-bridge :8787.
 - input-bridge translates to xdotool key/mouse against the DeSmuME X11 window.
 - Xvfb captures the resulting framebuffer at :99.
 - ffmpeg x11grab → RTSP push → mediamtx :8554.

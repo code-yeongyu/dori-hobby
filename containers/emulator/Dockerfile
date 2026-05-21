@@ -44,6 +44,6 @@ RUN chmod +x /app/entrypoint.sh
 ENV DISPLAY=:99
 ENV XAUTHORITY=/tmp/.Xauthority
 
-EXPOSE 7878
+EXPOSE 8787
 
 ENTRYPOINT ["tini", "--", "/app/entrypoint.sh"]

@@ -3,7 +3,7 @@ import { Hono } from "hono";
 
 import type { DesmumeDriver } from "./desmume-driver.js";
 import { resolveButtonPressOptions } from "./input-options.js";
-import { formatPlaytimeHuman, type PlaytimeSnapshotProvider } from "./playtime.js";
+import { buildPlaytimeRoutes, type PlaytimeRouteService } from "./playtime-routes.js";
 import {
 	type AUntilDialogRequest,
 	AUntilDialogSchema,
@@ -32,26 +32,21 @@ const toErrorMessage = (error: unknown): string => {
 };
 
 const nullPlaytime: PlaytimeSnapshotProvider = {
-	snapshot() {
-		return { totalSeconds: 0, startedAt: new Date(0) };
+	async snapshot() {
+		return { total_seconds: 0, last_tick_epoch_ms: 0, started_at_ms: 0 };
+	},
+	async recordEvent(event: string) {
+		return { event, at_iso: new Date(0).toISOString(), total_seconds: 0 };
 	},
 };
+
+type PlaytimeSnapshotProvider = PlaytimeRouteService;
 
 export const buildApp = (driver: BridgeDriver, playtime: PlaytimeSnapshotProvider = nullPlaytime) => {
 	const app = new Hono();
 
 	app.get("/health", (context) => context.json({ status: "ok" }));
-
-	app.get("/playtime", (context) => {
-		const snapshot = playtime.snapshot();
-		return context.json({
-			ok: true,
-			total_seconds: snapshot.totalSeconds,
-			total_human: formatPlaytimeHuman(snapshot.totalSeconds),
-			started_at: snapshot.startedAt.toISOString(),
-			ticking: true,
-		});
-	});
+	app.route("/", buildPlaytimeRoutes(playtime));
 
 	app.post("/button", async (context) => {
 		const body = await context.req.json();
