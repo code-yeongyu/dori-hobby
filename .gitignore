@@ -58,3 +58,4 @@ playwright-report/
 .omo/
 /desmume-state/
 .dori-sessions/
+/dori-live-*.png

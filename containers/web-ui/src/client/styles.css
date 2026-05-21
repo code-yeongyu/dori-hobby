@@ -22,7 +22,14 @@ html,
 body,
 #app {
   margin: 0;
-  min-height: 100dvh;
+  /* HARD-CAP at viewport. `min-height` lets internal content (e.g. a long
+     activity-log thinking row) grow the whole page, which inflates the
+     video element to thousands of px tall because .stream-viewer has
+     height:100% relative to a parent that just kept growing. `height` +
+     `overflow:hidden` forces the inner panels (activity log, chat) to
+     scroll inside their own scroll containers instead of the page. */
+  height: 100dvh;
+  overflow: hidden;
 }
 
 body {
@@ -37,7 +44,7 @@ body {
    row 1: video (col 1, spans 2 rows of right column) + activity log (top-right) + chat (bottom-right)
    row 2: status bar across the whole bottom */
 .app-grid {
-  min-height: 100dvh;
+  height: 100dvh;
   display: grid;
   grid-template-columns: minmax(0, 1fr) clamp(280px, 28vw, 380px);
   grid-template-rows: minmax(0, 1.4fr) minmax(0, 1fr) 40px;
