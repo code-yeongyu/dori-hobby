@@ -26,50 +26,104 @@ export const StreamViewer = ({
       return;
     }
 
+    // mediamtx tears down idle WebRTC peer connections on its own (~60s
+    // for us in practice), and Safari/Chromium drop the connection on
+    // tab-backgrounding sleep too. The previous version of this effect
+    // surfaced that as a permanent "Disconnected" overlay until the
+    // user clicked Retry. That's user-hostile for a passive monitor:
+    // the user opens the page once and expects it to recover on its
+    // own no matter how many times the underlying peer dies.
+    //
+    // Strategy: track the current client + a reconnect timer in
+    // closure-local refs. On any non-live state, schedule a reconnect
+    // with exponential backoff (1s → 2s → 4s → 8s ceiling). Reset the
+    // attempt counter on a successful "live". On unmount, raise the
+    // stopped flag so an in-flight `close()` (which itself fires
+    // onState("disconnected")) cannot retrigger another reconnect.
     let stopped = false;
-    let client = createWhepClient({
-      url: "/stream/whep",
-      videoEl: video,
-      onState: (next) => {
-        if (!stopped) {
-          setState(next);
-          onStreamStatus(next);
-        }
-      },
-    });
+    let currentClient: ReturnType<typeof createWhepClient> | undefined;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
 
-    const connect = async (): Promise<void> => {
-      try {
-        await client.connect();
-      } catch {
-        if (stopped) {
-          return;
-        }
-        client.close();
-        client = createWhepClient({
-          url: fallbackWhepUrl(),
-          videoEl: video,
-          onState: (next) => {
-            if (!stopped) {
-              setState(next);
-              onStreamStatus(next);
-            }
-          },
-        });
-        await client.connect().catch(() => {
-          if (!stopped) {
-            setState("disconnected");
-            onStreamStatus("disconnected");
-          }
-        });
+    const clearReconnectTimer = (): void => {
+      if (reconnectTimer !== undefined) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = undefined;
       }
     };
 
-    void connect();
+    const teardownClient = (): void => {
+      if (currentClient !== undefined) {
+        currentClient.close();
+        currentClient = undefined;
+      }
+    };
+
+    const handleState = (next: StreamState): void => {
+      if (stopped) {
+        return;
+      }
+      setState(next);
+      onStreamStatus(next);
+      if (next === "live") {
+        attempt = 0;
+        return;
+      }
+      if (next === "disconnected") {
+        scheduleReconnect();
+      }
+    };
+
+    const tryConnect = async (url: string): Promise<boolean> => {
+      if (stopped) {
+        return false;
+      }
+      teardownClient();
+      const client = createWhepClient({ url, videoEl: video, onState: handleState });
+      currentClient = client;
+      try {
+        await client.connect();
+        return !stopped;
+      } catch {
+        return false;
+      }
+    };
+
+    const scheduleReconnect = (): void => {
+      if (stopped || reconnectTimer !== undefined) {
+        return;
+      }
+      // 1s, 2s, 4s, 8s, then stay at 8s. Connectivity blips usually
+      // clear inside two cycles; longer outages keep retrying at 8s so
+      // the page heals itself the moment mediamtx becomes reachable.
+      const delay = Math.min(1000 * 2 ** attempt, 8000);
+      attempt += 1;
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = undefined;
+        void runConnectChain();
+      }, delay);
+    };
+
+    const runConnectChain = async (): Promise<void> => {
+      if (stopped) {
+        return;
+      }
+      const primaryOk = await tryConnect("/stream/whep");
+      if (primaryOk || stopped) {
+        return;
+      }
+      const fallbackOk = await tryConnect(fallbackWhepUrl());
+      if (!fallbackOk && !stopped) {
+        scheduleReconnect();
+      }
+    };
+
+    void runConnectChain();
 
     return () => {
       stopped = true;
-      client.close();
+      clearReconnectTimer();
+      teardownClient();
     };
   }, [onStreamStatus]);
 
