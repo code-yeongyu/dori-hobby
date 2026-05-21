@@ -215,25 +215,14 @@ export function startInterventionServer(
 					sendError(sock, "injection failed: unavailable");
 					return;
 				}
-				// 'steer' deliveryAs interrupts the current assistant response
-				// and redirects with the new user message — required by senpi
-				// 2026.5.19+ for any chat injection during an active turn.
-				const maybePromise: unknown = currentPi.sendUserMessage(
-					parsed.text,
-					{ deliverAs: "steer" },
-				);
-				if (
-					maybePromise !== null &&
-					typeof maybePromise === "object" &&
-					typeof (maybePromise as { then?: unknown }).then === "function"
-				) {
-					(maybePromise as Promise<unknown>).catch((error: unknown) => {
-						console.error(
-							"[senpi-dori-desmume] chat injection rejected:",
-							error instanceof Error ? error.message : error,
-						);
-					});
-				}
+				Promise.resolve(
+					currentPi.sendUserMessage(parsed.text, { deliverAs: "steer" }),
+				).catch((error: unknown) => {
+					console.error(
+						"[senpi-dori-desmume] chat injection rejected:",
+						error instanceof Error ? error.message : error,
+					);
+				});
 				const ack: ChatAck = { type: "ack", id: parsed.id };
 				sock.send(JSON.stringify(ack));
 			} catch (error) {

@@ -39,10 +39,45 @@ async function saveStateToBridge(
 	}
 }
 
+async function waitForFileSettled(
+	filePath: string,
+	timeoutMs = 3_000,
+	intervalMs = 100,
+): Promise<void> {
+	const fs = await import("node:fs/promises");
+	const deadline = Date.now() + timeoutMs;
+	let previousMtime = 0;
+	let stableForMs = 0;
+	while (Date.now() < deadline) {
+		try {
+			const stat = await fs.stat(filePath);
+			const currentMtime = stat.mtimeMs;
+			if (currentMtime === previousMtime && stat.size > 0) {
+				stableForMs += intervalMs;
+				if (stableForMs >= intervalMs * 2) {
+					return;
+				}
+			} else {
+				stableForMs = 0;
+				previousMtime = currentMtime;
+			}
+		} catch {
+			// File may not exist yet — keep polling.
+		}
+		await new Promise((resolve) => setTimeout(resolve, intervalMs));
+	}
+}
+
 async function backupSaveStateToHost(slot: number): Promise<void> {
 	const fs = await import("node:fs/promises");
 	const path = await import("node:path");
 	const src = path.resolve("desmume-state", `pokemon-white.ds${slot}`);
+	// DeSmuME writes the slot file asynchronously after xdotool's
+	// Shift+F<n>. If we copy too early we capture either a missing file
+	// or a half-written one. Wait until the mtime is stable for at least
+	// 200ms before copying.
+	await waitForFileSettled(src);
+
 	const backupDir = path.resolve("desmume-state", "backups");
 	await fs.mkdir(backupDir, { recursive: true });
 	const stamp = new Date().toISOString().replace(/[:.]/g, "-");

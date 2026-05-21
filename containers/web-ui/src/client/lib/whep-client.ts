@@ -11,14 +11,24 @@ interface CreateWhepClientOptions {
   readonly onState: (state: StreamState) => void;
 }
 
-const resolveLocation = (base: string, location: string): string => {
-  if (location.startsWith("http://") || location.startsWith("https://")) {
-    return location;
+const isAbsoluteUrl = (value: string): boolean =>
+  value.startsWith("http://") || value.startsWith("https://");
+
+// Resolve the WHEP Location header against the request URL — NOT against
+// window.location.origin alone. mediamtx may emit either an absolute URL
+// or a relative path; both must round-trip through our /stream/whep proxy
+// origin, not the bare page origin, so PATCH/DELETE reach mediamtx.
+export const resolveWhepLocation = (
+  whepRequestUrl: string,
+  locationHeader: string,
+): string => {
+  if (isAbsoluteUrl(locationHeader)) {
+    return locationHeader;
   }
-  if (location.startsWith("/")) {
-    return new URL(location, window.location.origin).toString();
-  }
-  return new URL(location, new URL(base, window.location.origin)).toString();
+  const base = isAbsoluteUrl(whepRequestUrl)
+    ? new URL(whepRequestUrl)
+    : new URL(whepRequestUrl, window.location.origin);
+  return new URL(locationHeader, base).toString();
 };
 
 export const createWhepClient = (
@@ -26,21 +36,48 @@ export const createWhepClient = (
 ): WhepClient => {
   let connection: RTCPeerConnection | undefined;
   let sessionUrl: string | undefined;
+  // Buffer ICE candidates that fire BEFORE the WHEP POST returns its
+  // Location header — local-network gathering can outrun the POST round
+  // trip. Discarding pre-Location candidates weakens the trickle ICE
+  // check set Firefox relies on.
+  const pendingCandidates: string[] = [];
 
-  // Best-effort DELETE on close. Per WHEP (RFC 9725) this is how the server
-  // releases the peer session — without it, mediamtx keeps a zombie session
-  // around until its idle timeout expires.
+  const sendTrickle = (candidate: string): void => {
+    if (sessionUrl === undefined) {
+      pendingCandidates.push(candidate);
+      return;
+    }
+    Promise.resolve(
+      fetch(sessionUrl, {
+        method: "PATCH",
+        headers: { "content-type": "application/trickle-ice-sdpfrag" },
+        body: `a=ice-options:trickle\r\na=${candidate}\r\n`,
+      }),
+    ).catch(() => {});
+  };
+
+  const flushPendingCandidates = (): void => {
+    if (sessionUrl === undefined) {
+      return;
+    }
+    const queued = pendingCandidates.splice(0, pendingCandidates.length);
+    for (const candidate of queued) {
+      sendTrickle(candidate);
+    }
+  };
+
+  // Best-effort DELETE on close (RFC 9725 session release). keepalive lets
+  // the request survive page unload, but the browser is free to drop it —
+  // mediamtx will eventually reap idle sessions either way.
   const releaseSession = (): void => {
     if (sessionUrl === undefined) {
       return;
     }
     const target = sessionUrl;
     sessionUrl = undefined;
-    try {
-      fetch(target, { method: "DELETE", keepalive: true }).catch(() => {});
-    } catch {
-      // Ignore: page may be unloading and fetch is throwing synchronously.
-    }
+    Promise.resolve(
+      fetch(target, { method: "DELETE", keepalive: true }),
+    ).catch(() => {});
   };
 
   return {
@@ -59,25 +96,11 @@ export const createWhepClient = (
         }
       };
 
-      // Trickle ICE: send each locally-gathered candidate to mediamtx via
-      // PATCH against the session URL the server returned in `Location`.
-      // Firefox is stricter than Chromium about trickling — without this
-      // PATCH the peer often stalls on the host-only initial offer.
       connection.onicecandidate = (event) => {
-        if (event.candidate === null || sessionUrl === undefined) {
+        if (event.candidate === null) {
           return;
         }
-        const fragment = `a=ice-options:trickle\r\na=${event.candidate.candidate}\r\n`;
-        try {
-          fetch(sessionUrl, {
-            method: "PATCH",
-            headers: { "content-type": "application/trickle-ice-sdpfrag" },
-            body: fragment,
-          }).catch(() => {});
-        } catch {
-          // Ignore: network errors during trickle are non-fatal; ICE will
-          // succeed if the original offer's candidates are sufficient.
-        }
+        sendTrickle(event.candidate.candidate);
       };
 
       connection.onconnectionstatechange = () => {
@@ -118,7 +141,8 @@ export const createWhepClient = (
 
       const locationHeader = response.headers.get("location");
       if (locationHeader !== null && locationHeader.length > 0) {
-        sessionUrl = resolveLocation(options.url, locationHeader);
+        sessionUrl = resolveWhepLocation(options.url, locationHeader);
+        flushPendingCandidates();
       }
 
       const answer = await response.text();
@@ -131,6 +155,7 @@ export const createWhepClient = (
         connection.close();
       }
       connection = undefined;
+      pendingCandidates.length = 0;
       options.onState("disconnected");
     },
   };

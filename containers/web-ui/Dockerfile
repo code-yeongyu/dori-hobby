@@ -3,8 +3,8 @@ WORKDIR /app
 COPY containers/web-ui/package.json ./
 RUN bun install --frozen-lockfile || bun install
 COPY containers/web-ui/ .
-RUN bun run build:client || true
-RUN bun build src/server/index.ts --outdir dist-server --target bun --format esm || true
+RUN bun run build:client
+RUN bun build src/server/index.ts --outdir dist-server --target bun --format esm
 
 FROM oven/bun:1.3-alpine
 WORKDIR /app

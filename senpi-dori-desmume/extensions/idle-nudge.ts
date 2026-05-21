@@ -7,6 +7,7 @@ import {
 export interface IdleNudgeOptions {
 	readonly idleTimeoutMs: number;
 	readonly nudgeText: string;
+	readonly maxConsecutive?: number;
 }
 
 export interface IdleNudgeHandle {
@@ -15,11 +16,15 @@ export interface IdleNudgeHandle {
 
 type PiForIdle = Pick<ExtensionAPI, "on" | "sendUserMessage">;
 
+const DEFAULT_MAX_CONSECUTIVE = 5;
+
 export function installIdleNudge(
 	pi: PiForIdle,
 	options: IdleNudgeOptions,
 ): IdleNudgeHandle {
 	let idleTimer: ReturnType<typeof setTimeout> | undefined;
+	let consecutiveCount = 0;
+	const maxConsecutive = options.maxConsecutive ?? DEFAULT_MAX_CONSECUTIVE;
 
 	const clearIdleTimer = (): void => {
 		if (idleTimer !== undefined) {
@@ -30,6 +35,7 @@ export function installIdleNudge(
 
 	pi.on("agent_start", () => {
 		clearIdleTimer();
+		consecutiveCount = 0;
 		broadcastAgentStatus("running");
 	});
 
@@ -39,11 +45,19 @@ export function installIdleNudge(
 		if (options.idleTimeoutMs <= 0) {
 			return;
 		}
-		idleTimer = setTimeout(() => {
-			idleTimer = undefined;
+		if (consecutiveCount >= maxConsecutive) {
 			broadcastAction(
 				"screenshot",
-				`auto-nudge (idle ${Math.round(options.idleTimeoutMs / 1000)}s)`,
+				`auto-nudge disabled after ${consecutiveCount} consecutive idle nudges`,
+			);
+			return;
+		}
+		idleTimer = setTimeout(() => {
+			idleTimer = undefined;
+			consecutiveCount += 1;
+			broadcastAction(
+				"screenshot",
+				`auto-nudge ${consecutiveCount}/${maxConsecutive} (idle ${Math.round(options.idleTimeoutMs / 1000)}s)`,
 			);
 			const logFailure = (error: unknown): void => {
 				console.error(
@@ -52,16 +66,9 @@ export function installIdleNudge(
 				);
 			};
 			try {
-				const maybePromise: unknown = pi.sendUserMessage(options.nudgeText, {
-					deliverAs: "steer",
-				});
-				if (
-					maybePromise !== null &&
-					typeof maybePromise === "object" &&
-					typeof (maybePromise as { then?: unknown }).then === "function"
-				) {
-					(maybePromise as Promise<unknown>).catch(logFailure);
-				}
+				Promise.resolve(
+					pi.sendUserMessage(options.nudgeText, { deliverAs: "steer" }),
+				).catch(logFailure);
 			} catch (error: unknown) {
 				logFailure(error);
 			}

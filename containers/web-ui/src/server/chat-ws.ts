@@ -101,6 +101,20 @@ const getOrCreateUpstream = (): UpstreamConnection => {
   });
   socket.once("close", () => {
     upstream = undefined;
+    // After a senpi restart the existing upstream socket fires "close" but
+    // existing browser subscribers stay connected. Eagerly attempt to
+    // re-open the upstream connection so future agent-action / agent-status
+    // events still flow through. Failures here are silent — the next chat
+    // send or subscribe call would retry anyway.
+    if (subscribers.size > 0) {
+      setTimeout(() => {
+        try {
+          getOrCreateUpstream();
+        } catch {
+          // Ignore — next send/subscribe will retry.
+        }
+      }, 1_000);
+    }
   });
 
   return upstream;
