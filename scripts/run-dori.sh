@@ -108,6 +108,7 @@ SENPI_ARGS=(
 	"--thinking" "${THINKING}"
 	"--session-dir" "${SESSION_DIR}"
 	"--no-extensions"
+	"--no-builtin-tools"
 	"-e" "${EXTENSION_PATH}"
 	"--append-system-prompt" "$(cat "${SYSTEM_PROMPT_PATH}")"
 	"--tools" "${TOOLS}"
