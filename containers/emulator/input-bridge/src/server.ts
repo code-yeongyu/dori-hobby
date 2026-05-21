@@ -4,6 +4,8 @@ import { Hono } from "hono";
 import { type CommandResult, type CommandRunner, DesmumeDriver } from "./desmume-driver.js";
 import { resolveButtonPressOptions } from "./input-options.js";
 import {
+	type AUntilDialogRequest,
+	AUntilDialogSchema,
 	type ButtonRequest,
 	ButtonSchema,
 	type SaveStateRequest,
@@ -125,6 +127,28 @@ export const buildApp = (driver: DesmumeDriver) => {
 		}
 	});
 
+	app.post("/a-until-dialog", async (context) => {
+		const body = await context.req.json();
+		let payload: AUntilDialogRequest;
+		try {
+			payload = Value.Parse(AUntilDialogSchema, body);
+		} catch {
+			return context.json({ ok: false, error: "invalid a-until-dialog payload" }, 400);
+		}
+
+		try {
+			const result = await driver.aUntilDialog(payload);
+			return context.json({
+				ok: true,
+				stop_reason: result.stopReason,
+				press_count: result.pressCount,
+				duration_ms: result.durationMs,
+			});
+		} catch (error) {
+			return context.json({ ok: false, error: toErrorMessage(error) }, 503);
+		}
+	});
+
 	app.post("/sequence", async (context) => {
 		const body = await context.req.json();
 		let payload: SequenceRequest;
@@ -135,8 +159,25 @@ export const buildApp = (driver: DesmumeDriver) => {
 		}
 
 		try {
-			await driver.runSequence(payload.steps);
-			return context.json({ ok: true });
+			const result = await driver.runSequence(payload.steps, payload);
+			if (result.aborted) {
+				return context.json({
+					ok: true,
+					aborted: true,
+					stepsExecuted: result.stepsExecuted,
+					stepsRemaining: result.stepsRemaining,
+					abortReason: result.abortReason,
+					stuckStreak: result.stuckStreak,
+				});
+			}
+			return context.json({
+				ok: true,
+				aborted: false,
+				stepsExecuted: result.stepsExecuted,
+				stepsRemaining: result.stepsRemaining,
+				abortReason: null,
+				stuckStreak: result.stuckStreak,
+			});
 		} catch (error) {
 			return context.json({ ok: false, error: toErrorMessage(error) }, 503);
 		}

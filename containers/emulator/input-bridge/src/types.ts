@@ -7,6 +7,11 @@ export type NdsButton = (typeof NDS_BUTTONS)[number];
 export const TOUCH_MAX_X = 255;
 export const TOUCH_MAX_Y = 191;
 export const SEQUENCE_MAX_STEPS = 32;
+export const SEQUENCE_DEFAULT_ABORT_ON_STUCK = true;
+export const SEQUENCE_DEFAULT_STUCK_THRESHOLD = 5;
+export const A_UNTIL_DIALOG_DEFAULT_MAX_PRESSES = 80;
+export const A_UNTIL_DIALOG_DEFAULT_PRESS_INTERVAL_MS = 250;
+export const A_UNTIL_DIALOG_DEFAULT_STABLE_THRESHOLD = 3;
 
 export const NdsButtonSchema = Type.Union([
 	Type.Literal("A"),
@@ -75,6 +80,14 @@ export const SequenceStepSchema = Type.Union([
 
 export const SequenceSchema = Type.Object({
 	steps: Type.Array(SequenceStepSchema, { minItems: 1, maxItems: SEQUENCE_MAX_STEPS }),
+	abort_on_stuck: Type.Optional(Type.Boolean()),
+	stuck_threshold: Type.Optional(Type.Integer({ minimum: 2, maximum: 16 })),
+});
+
+export const AUntilDialogSchema = Type.Object({
+	max_presses: Type.Optional(Type.Integer({ minimum: 1, maximum: 200 })),
+	press_interval_ms: Type.Optional(Type.Integer({ minimum: 50, maximum: 2000 })),
+	stable_threshold: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
 });
 
 // DeSmuME 0.9.11 GTK supports save-state slots 1..10 (hotkeys F1..F10
@@ -92,6 +105,7 @@ export type TouchPoint = Static<typeof TouchPointSchema>;
 export type TouchDragRequest = Static<typeof TouchDragSchema>;
 export type SequenceStep = Static<typeof SequenceStepSchema>;
 export type SequenceRequest = Static<typeof SequenceSchema>;
+export type AUntilDialogRequest = Static<typeof AUntilDialogSchema>;
 export type SaveStateRequest = Static<typeof SaveStateSchema>;
 
 export const BUTTON_KEY_MAP = {

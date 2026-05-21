@@ -1,9 +1,32 @@
-import type { ButtonPressOptions, TouchPoint } from "./types.js";
+import {
+	A_UNTIL_DIALOG_DEFAULT_MAX_PRESSES,
+	A_UNTIL_DIALOG_DEFAULT_PRESS_INTERVAL_MS,
+	A_UNTIL_DIALOG_DEFAULT_STABLE_THRESHOLD,
+	type AUntilDialogRequest,
+	type ButtonPressOptions,
+	SEQUENCE_DEFAULT_ABORT_ON_STUCK,
+	SEQUENCE_DEFAULT_STUCK_THRESHOLD,
+	type SequenceRequest,
+	type TouchPoint,
+} from "./types.js";
 
 export type ResolvedButtonPressOptions = {
 	readonly holdMs: number;
 	readonly repeatCount: number;
 	readonly repeatIntervalMs: number;
+};
+
+export type ResolvedAUntilDialogOptions = {
+	readonly maxPresses: number;
+	readonly pressIntervalMs: number;
+	readonly stableThreshold: number;
+};
+
+export type SequenceRunOptions = Omit<SequenceRequest, "steps">;
+
+export type ResolvedSequenceRunOptions = {
+	readonly abortOnStuck: boolean;
+	readonly stuckThreshold: number;
 };
 
 export const DEFAULT_REPEAT_COUNT = 1;
@@ -41,4 +64,21 @@ export const resolveButtonPressOptions = (options?: number | ButtonPressOptions)
 		throw new Error("hold_ms and repeat_count are mutually exclusive");
 	}
 	return { holdMs, repeatCount, repeatIntervalMs };
+};
+
+export const resolveAUntilDialogOptions = (options?: AUntilDialogRequest): ResolvedAUntilDialogOptions => {
+	const maxPresses = options?.max_presses ?? A_UNTIL_DIALOG_DEFAULT_MAX_PRESSES;
+	const pressIntervalMs = options?.press_interval_ms ?? A_UNTIL_DIALOG_DEFAULT_PRESS_INTERVAL_MS;
+	const stableThreshold = options?.stable_threshold ?? A_UNTIL_DIALOG_DEFAULT_STABLE_THRESHOLD;
+	assertIntegerInRange("max_presses", maxPresses, 1, 200);
+	assertIntegerInRange("press_interval_ms", pressIntervalMs, 50, 2000);
+	assertIntegerInRange("stable_threshold", stableThreshold, 1, 10);
+	return { maxPresses, pressIntervalMs, stableThreshold };
+};
+
+export const resolveSequenceRunOptions = (options?: SequenceRunOptions): ResolvedSequenceRunOptions => {
+	const abortOnStuck = options?.abort_on_stuck ?? SEQUENCE_DEFAULT_ABORT_ON_STUCK;
+	const stuckThreshold = options?.stuck_threshold ?? SEQUENCE_DEFAULT_STUCK_THRESHOLD;
+	assertIntegerInRange("stuck_threshold", stuckThreshold, 2, 16);
+	return { abortOnStuck, stuckThreshold };
 };

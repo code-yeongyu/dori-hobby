@@ -243,7 +243,7 @@ describe("input-bridge HTTP server", () => {
 		});
 
 		expect(response.status).toBe(200);
-		expect(sleeps).toEqual([50, 100, 80]);
+		expect(sleeps).toEqual([50, 100, 80, 160]);
 
 		const tooMany = Array.from({ length: 50 }, () => ({ kind: "button", button: "A" }));
 		const rejected = await postJsonRequest(app, "/sequence", { steps: tooMany });

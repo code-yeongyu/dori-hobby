@@ -244,8 +244,16 @@ describe("DesmumeDriver", () => {
 			{ cmd: "xdotool", args: ["mousemove", "60", "337"], input: undefined },
 			{ cmd: "xdotool", args: ["mousedown", "1"], input: undefined },
 			{ cmd: "xdotool", args: ["mouseup", "1"], input: undefined },
+			{
+				cmd: "sh",
+				args: [
+					"-c",
+					"import -window root miff:- | convert miff:- -crop 256x384+10+95 +repage -resize 8x8! -depth 8 rgb:-",
+				],
+				input: undefined,
+			},
 		]);
-		expect(sleeps).toEqual([50, 100, 80]);
+		expect(sleeps).toEqual([50, 100, 80, 160]);
 	});
 
 	it("rejects touch coordinates outside DS bounds", async () => {
