@@ -199,6 +199,36 @@ export class DesmumeDriver {
 		await this.runner.run("xdotool", ["mouseup", "1"]);
 	}
 
+	/**
+	 * Save the current emulator state into DeSmuME's slot N (1..10).
+	 * Hotkey: Shift+F<N>. DeSmuME writes the file to
+	 *   ~/.config/desmume/<rom-basename>.dsN
+	 * which the entrypoint mounts as a persistent volume so the state
+	 * survives container restarts.
+	 */
+	public async saveState(slot: number): Promise<void> {
+		if (slot < 1 || slot > 10) {
+			throw new Error(`slot out of range: ${slot}`);
+		}
+		const windowId = await this.findWindow();
+		await this.focusCanvas(windowId);
+		// xdotool's key syntax for "shift + F1" is "shift+F1".
+		await this.runner.run("xdotool", ["key", `shift+F${slot}`]);
+	}
+
+	/**
+	 * Load DeSmuME's slot N (1..10) into the running emulator. Hotkey: F<N>.
+	 * No-op if the slot file doesn't exist — DeSmuME will just beep.
+	 */
+	public async loadState(slot: number): Promise<void> {
+		if (slot < 1 || slot > 10) {
+			throw new Error(`slot out of range: ${slot}`);
+		}
+		const windowId = await this.findWindow();
+		await this.focusCanvas(windowId);
+		await this.runner.run("xdotool", ["key", `F${slot}`]);
+	}
+
 	public async captureScreen(): Promise<{
 		readonly base64: string;
 		readonly width: number;

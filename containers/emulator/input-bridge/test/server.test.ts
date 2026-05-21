@@ -191,6 +191,64 @@ describe("input-bridge HTTP server", () => {
 		]);
 	});
 
+	it("saves state via /save-state -> Shift+F<slot>", async () => {
+		const runner = new MockRunner([
+			{ stdout: textBytes("400\n"), stderr: "", code: 0 },
+			geometryResult,
+		]);
+		const { app } = setup(runner, async () => {});
+
+		const response = await app.request("/save-state", {
+			method: "POST",
+			headers: jsonHeaders,
+			body: JSON.stringify({ slot: 1 }),
+		});
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({ ok: true, slot: 1 });
+		// The save hotkey is xdotool key "shift+F1" — same syntax DeSmuME
+		// listens for via its GTK accelerator group.
+		expect(runner.calls.at(-1)).toEqual({
+			cmd: "xdotool",
+			args: ["key", "shift+F1"],
+		});
+	});
+
+	it("loads state via /load-state -> F<slot>", async () => {
+		const runner = new MockRunner([
+			{ stdout: textBytes("400\n"), stderr: "", code: 0 },
+			geometryResult,
+		]);
+		const { app } = setup(runner, async () => {});
+
+		const response = await app.request("/load-state", {
+			method: "POST",
+			headers: jsonHeaders,
+			body: JSON.stringify({ slot: 3 }),
+		});
+
+		expect(response.status).toBe(200);
+		await expect(response.json()).resolves.toEqual({ ok: true, slot: 3 });
+		expect(runner.calls.at(-1)).toEqual({
+			cmd: "xdotool",
+			args: ["key", "F3"],
+		});
+	});
+
+	it("rejects out-of-range save-state slots", async () => {
+		const runner = new MockRunner([]);
+		const { app } = setup(runner, async () => {});
+
+		for (const slot of [0, 11, -1]) {
+			const response = await app.request("/save-state", {
+				method: "POST",
+				headers: jsonHeaders,
+				body: JSON.stringify({ slot }),
+			});
+			expect(response.status).toBe(400);
+		}
+	});
+
 	it("returns 503 when no DeSmuME window is found", async () => {
 		const runner = new MockRunner([
 			{ stdout: textBytes(""), stderr: "", code: 1 },

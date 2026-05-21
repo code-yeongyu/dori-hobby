@@ -2,7 +2,14 @@ import { Value } from "@sinclair/typebox/value";
 import { Hono } from "hono";
 
 import { type CommandResult, type CommandRunner, DesmumeDriver } from "./desmume-driver.js";
-import { type ButtonRequest, ButtonSchema, type TouchRequest, TouchSchema } from "./types.js";
+import {
+	type ButtonRequest,
+	ButtonSchema,
+	type SaveStateRequest,
+	SaveStateSchema,
+	type TouchRequest,
+	TouchSchema,
+} from "./types.js";
 
 const toErrorMessage = (error: unknown): string => {
 	if (error instanceof Error) {
@@ -86,6 +93,38 @@ export const buildApp = (driver: DesmumeDriver) => {
 		try {
 			await driver.touch(payload.x, payload.y);
 			return context.json({ ok: true });
+		} catch (error) {
+			return context.json({ ok: false, error: toErrorMessage(error) }, 503);
+		}
+	});
+
+	app.post("/save-state", async (context) => {
+		const body = await context.req.json();
+		let payload: SaveStateRequest;
+		try {
+			payload = Value.Parse(SaveStateSchema, body);
+		} catch {
+			return context.json({ ok: false, error: "invalid save-state payload" }, 400);
+		}
+		try {
+			await driver.saveState(payload.slot);
+			return context.json({ ok: true, slot: payload.slot });
+		} catch (error) {
+			return context.json({ ok: false, error: toErrorMessage(error) }, 503);
+		}
+	});
+
+	app.post("/load-state", async (context) => {
+		const body = await context.req.json();
+		let payload: SaveStateRequest;
+		try {
+			payload = Value.Parse(SaveStateSchema, body);
+		} catch {
+			return context.json({ ok: false, error: "invalid load-state payload" }, 400);
+		}
+		try {
+			await driver.loadState(payload.slot);
+			return context.json({ ok: true, slot: payload.slot });
 		} catch (error) {
 			return context.json({ ok: false, error: toErrorMessage(error) }, 503);
 		}

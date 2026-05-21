@@ -30,8 +30,17 @@ export const TouchSchema = Type.Object({
 	y: Type.Integer({ minimum: 0, maximum: TOUCH_MAX_Y }),
 });
 
+// DeSmuME 0.9.11 GTK supports save-state slots 1..10 (hotkeys F1..F10
+// to load, Shift+F1..F10 to save). We expose slot 0 too because DeSmuME
+// accepts the "0" suffix internally for a "quick" slot in some builds —
+// but the safe range is 1..10 and we default to slot 1 for autosave.
+export const SaveStateSchema = Type.Object({
+	slot: Type.Integer({ minimum: 1, maximum: 10 }),
+});
+
 export type ButtonRequest = Static<typeof ButtonSchema>;
 export type TouchRequest = Static<typeof TouchSchema>;
+export type SaveStateRequest = Static<typeof SaveStateSchema>;
 
 export const BUTTON_KEY_MAP = {
 	A: "x",
