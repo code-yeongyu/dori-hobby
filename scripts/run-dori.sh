@@ -19,7 +19,7 @@
 # Env:
 #   DORI_MODEL      same as --model
 #   DORI_PROVIDER   senpi provider name (default: openrouter)
-#   DORI_TOOLS      comma-separated tool allowlist (default: the 7 nds_ tools)
+#   DORI_TOOLS      comma-separated tool allowlist (default: the NDS tools)
 #   DORI_ANTHROPIC_COMPUTER_USE_BETA  documented native Anthropic beta string
 #   DORI_OPENAI_COMPUTER_USE_MODEL     documented OpenAI Responses computer-use model
 #
@@ -34,6 +34,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SESSION_DIR="${REPO_ROOT}/.dori-sessions"
 EXTENSION_PATH="${REPO_ROOT}/senpi-dori-desmume/extensions/index.ts"
 SYSTEM_PROMPT_PATH="${REPO_ROOT}/data/system-prompt.md"
+SENPI_BIN="${DORI_SENPI_BIN:-${REPO_ROOT}/senpi-dori-desmume/node_modules/.bin/senpi}"
 PROVIDER="${DORI_PROVIDER:-anthropic}"
 # Default: claude-opus-4-7 with max thinking via the user's local
 # anthropic-compatible gateway (configured in ~/.senpi/agent/auth.json:
@@ -43,7 +44,7 @@ PROVIDER="${DORI_PROVIDER:-anthropic}"
 # does not host opus-4.7 yet, so we route directly through ccapi.
 MODEL="${DORI_MODEL:-claude-opus-4-7}"
 THINKING="${DORI_THINKING:-max}"
-TOOLS="${DORI_TOOLS:-nds_capture_screen,nds_press_button,nds_touch,nds_press_sequence,nds_a_until_dialog,nds_notepad_read,nds_notepad_append}"
+TOOLS="${DORI_TOOLS:-nds_capture_screen,nds_press_button,nds_touch,nds_press_sequence,nds_a_until_dialog,NdsAUntilDialog,nds_notepad_read,nds_notepad_append}"
 ANTHROPIC_COMPUTER_USE_BETA="${DORI_ANTHROPIC_COMPUTER_USE_BETA:-computer-use-2025-11-24}"
 OPENAI_COMPUTER_USE_MODEL="${DORI_OPENAI_COMPUTER_USE_MODEL:-gpt-5.4}"
 
@@ -94,11 +95,19 @@ if [[ -n "${CONTINUE_FLAG}" ]] && ! ls -1 "${SESSION_DIR}"/*.json >/dev/null 2>&
 fi
 
 # Build the senpi invocation as an array so spaces in paths are safe.
+#
+# --no-extensions: skip auto-discovered extensions (notably pi-macos-cua,
+# which registers a `computer_20250124` Anthropic Computer-Use tool type
+# that ccapi/anthropic API rejects with "tools.N: Input tag ... does not
+# match any of the expected tags". Dori only needs OUR explicit
+# nds_* extension, not the macOS-CUA one. The explicit -e flag still
+# loads our extension.
 SENPI_ARGS=(
 	"--provider" "${PROVIDER}"
 	"--model" "${MODEL}"
 	"--thinking" "${THINKING}"
 	"--session-dir" "${SESSION_DIR}"
+	"--no-extensions"
 	"-e" "${EXTENSION_PATH}"
 	"--append-system-prompt" "$(cat "${SYSTEM_PROMPT_PATH}")"
 	"--tools" "${TOOLS}"
@@ -112,8 +121,8 @@ trap 'echo "[run-dori] received SIGINT — exiting loop"; exit 0' INT
 attempt=0
 while true; do
 	attempt=$((attempt + 1))
-	echo "[run-dori] attempt ${attempt}: senpi ${SENPI_ARGS[*]}"
-	if senpi "${SENPI_ARGS[@]}"; then
+	echo "[run-dori] attempt ${attempt}: ${SENPI_BIN} ${SENPI_ARGS[*]}"
+	if "${SENPI_BIN}" "${SENPI_ARGS[@]}"; then
 		echo "[run-dori] senpi exited cleanly"
 		[[ "${LOOP}" -eq 0 ]] && break
 	else
