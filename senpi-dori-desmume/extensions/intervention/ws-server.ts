@@ -200,7 +200,7 @@ export function startInterventionServer(
 				// response with "Agent is already processing" and the
 				// user's nudge silently vanishes.
 				currentPi.sendUserMessage(parsed.text, {
-					streamingBehavior: "steer",
+					deliverAs: "steer",
 				});
 				const ack: ChatAck = { type: "ack", id: parsed.id };
 				sock.send(JSON.stringify(ack));
