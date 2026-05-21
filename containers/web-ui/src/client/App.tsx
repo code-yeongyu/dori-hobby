@@ -238,7 +238,17 @@ const handleMessage = (
   }
 
   if (message.type === "agent-action" || message.type === "agent-thinking") {
-    setActivity((previous) => [...previous.slice(-499), message]);
+    setActivity((previous) => {
+      // Drop duplicates that share an id with an entry already in the log.
+      // Senpi occasionally re-broadcasts the same agent-action on reconnect
+      // or when subscribe events fire twice; without dedup React throws
+      // "two children with the same key" warnings and ActivityLog may
+      // omit or duplicate rows visually.
+      if (previous.some((entry) => entry.id === message.id)) {
+        return previous;
+      }
+      return [...previous.slice(-499), message];
+    });
     setStatus((previous) => ({ ...previous, agent: "running" }));
     return;
   }
