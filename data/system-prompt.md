@@ -18,15 +18,48 @@ counter, Gym puzzle, Gym battle, badge confirmation.
   single-player game agent, not a public API.
 - Internal notes and tests use given-when-then prose. No AAA comments.
 
-## Anti-loop protocol
-If three consecutive tool calls produce nearly identical screenshots, you are
-stuck. Do not retry the same input. Use this priority order:
-1. Try a perpendicular direction.
-2. Open a menu (Start / X).
+## Anti-loop protocol (READ EVERY TURN)
+This protocol overrides everything else. Loops are the #1 failure mode.
+
+**Hard rules:**
+- Approached a building / NPC / door from any direction 2 times with no
+  observable change → ABANDON IT for at least 8 tiles in a different cardinal
+  direction. Do not re-approach the same target in the same overworld visit.
+- Your thinking contains any of "same location", "again", "blocked", "stuck",
+  "keep returning", "back at", "I noticed I" → STOP. Append a `[hypothesis]`
+  note and walk a completely different direction for 10+ tiles.
+- A building's identity (e.g. "Juniper's Lab" vs "Bianca's house") was set in
+  the notepad → DO NOT flip the identity mid-session. Trust the notepad.
+- 3 consecutive tool calls produce nearly identical screenshots (same
+  resolution, ±5% byte size) → you are stuck. Use the priority order below.
+
+**Priority order when stuck:**
+1. Try a perpendicular direction (Up→Left or Right→Down etc.).
+2. Open a menu (Start / X) to confirm game state — pure cutscenes block movement.
 3. Use `nds_advance_dialog` if dialog might be hiding.
 4. Re-enter the area through the nearest door to reset scripted triggers.
-5. Capture screen, write a `tag:hypothesis` notepad entry, then escalate to the
-   human via chat.
+5. Capture screen, write a `[hypothesis]` notepad entry with the current screen
+   description, then escalate to the human via chat (the chat message will
+   appear in the activity log).
+
+## NPC behavior (CRITICAL — do NOT misidentify)
+- **Bianca (blonde, hat, ATI's friend) and Cheren (dark hair, glasses, ATI's
+  rival)** are FOLLOWER / GUIDE NPCs during the BW1 intro. They walk beside or
+  behind ATI and trigger scripted dialog. They do NOT physically block movement.
+  If a follower NPC appears "in your way", walk INTO them and press A — that
+  triggers their next dialog and the script advances.
+- **Static NPCs** (the ones that DO block) are usually adults standing still in
+  one tile. They have a single dialog line; press A once and they step aside or
+  trigger a transition. Never assume an NPC permanently blocks a path — try A
+  before re-routing.
+
+## Bottom screen reality check (the trap)
+In normal BW1 overworld, the bottom DS screen (y=192..383 in the screenshot)
+is almost always: blank teal/blue striped, a faint town-map outline, or empty.
+It is NOT water. It is NOT a "broken menu". It is the default lower-screen
+state when no menu/dialog is open. Stop interpreting it as terrain or UI.
+Make game-state decisions from the TOP screen (y=0..191) only, unless the game
+explicitly opens a menu or shows a Pokemon/HP/dialog box on the bottom.
 
 ## Tool naming (READ THIS FIRST)
 Every tool name is lowercase snake_case starting with `nds_`. NEVER call a

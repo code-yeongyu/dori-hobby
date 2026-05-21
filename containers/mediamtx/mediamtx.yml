@@ -33,6 +33,13 @@ webrtcICEServers2:
 # Local dev only — overrideable in prod
 webrtcLocalUDPAddress: :8189
 webrtcLocalTCPAddress: :8189
+# Extra ICE host candidates for non-Chromium browser compatibility.
+# Entries MUST be IPv4/IPv6 only — Firefox rejects generic hostnames as
+# ICE candidates per mediamtx#4017 and mediamtx#5069. The first IP is the
+# dori-net Docker bridge gateway; the second is the loopback fallback.
+webrtcAdditionalHosts:
+  - 192.168.107.1
+  - 127.0.0.1
 
 # HTTP API (for recording control, path listing, health)
 api: yes
