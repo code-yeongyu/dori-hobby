@@ -56,3 +56,5 @@ playwright-report/
 
 # OMO metadata
 .omo/
+/desmume-state/
+.dori-sessions/

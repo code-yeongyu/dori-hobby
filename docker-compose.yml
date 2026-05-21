@@ -25,6 +25,11 @@ services:
       # and the .dct is too (see .gitignore).
       - ./nds:/app/nds
       - ./recordings:/app/recordings
+      # DeSmuME writes save-states (<rom-basename>.dsN) and the in-game
+      # battery save (<rom-basename>.dsv) to ~/.config/desmume/. Mount it
+      # to the host so progress survives container restarts. The dir is
+      # gitignored.
+      - ./desmume-state:/root/.config/desmume
     environment:
       DISPLAY: ":99"
       ROM_PATH: "/app/nds/pokemon-white.nds"

@@ -71,6 +71,19 @@ else
 		"--3d-engine=1"        # internal software rasterizer (no GL needed)
 		"--save-type=0"        # autodetect savetype
 	)
+	# Auto-resume from save-state slot 1 if one exists. DeSmuME writes
+	# slot files at ~/.config/desmume/<rom-basename>.dsN — we bind-mount
+	# that directory in docker-compose so the state survives restarts.
+	# senpi extension auto-saves slot 1 every 60s while Dori plays, so
+	# this lifts her right back where she left off on container reboot.
+	ROM_BASE_NAME="$(basename "${ROM_PATH}" .nds)"
+	STATE_SLOT_1="${HOME}/.config/desmume/${ROM_BASE_NAME}.ds1"
+	if [ -f "${STATE_SLOT_1}" ]; then
+		echo "[entrypoint] found save-state slot 1 at ${STATE_SLOT_1} ($(stat -c %s "${STATE_SLOT_1}") bytes) — auto-loading"
+		DESMUME_ARGS+=("--load-slot=1")
+	else
+		echo "[entrypoint] no save-state slot 1 — starting fresh"
+	fi
 	# DeSmuME 0.9.11 auto-loads `<rom>.dct` from the SAME dir as the ROM
 	# at boot. We drop ours there. The Serial header in the .dct file MUST
 	# match the loaded ROM's gamecode + CRC32 (we set IRAO-B552501C for

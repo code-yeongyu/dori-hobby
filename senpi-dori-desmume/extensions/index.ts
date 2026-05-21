@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@code-yeongyu/senpi";
 import {
+	broadcastAction,
 	broadcastThinking,
 	startInterventionServer,
 } from "./intervention/ws-server.js";
@@ -8,6 +9,22 @@ import {
 	pressButtonTool,
 	touchTool,
 } from "./tools/index.js";
+
+const DEFAULT_AUTOSAVE_INTERVAL_MS = 60_000;
+const DEFAULT_AUTOSAVE_SLOT = 1;
+const DEFAULT_BRIDGE_URL = "http://localhost:7878";
+
+async function saveStateToBridge(bridgeUrl: string, slot: number): Promise<void> {
+	const response = await fetch(`${bridgeUrl}/save-state`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ slot }),
+	});
+	if (!response.ok) {
+		const text = await response.text();
+		throw new Error(`save-state http ${response.status}: ${text}`);
+	}
+}
 
 export default async function extension(pi: ExtensionAPI): Promise<void> {
 	pi.registerTool(captureScreenTool);
@@ -43,10 +60,44 @@ export default async function extension(pi: ExtensionAPI): Promise<void> {
 		}
 	});
 
-	process.once("SIGINT", () => {
+	// Auto-save the emulator state to slot 1 every minute while Dori plays.
+	// DeSmuME persists the slot to ~/.config/desmume/<rom>.ds1, which is a
+	// bind-mount from the host, so progress survives container restarts AND
+	// senpi restarts. The entrypoint adds --load-slot=1 on next boot when
+	// the file exists, so resume is automatic. We surface every save as an
+	// activity-log row so the viewer can see the checkpoint cadence.
+	const autosaveIntervalMs = Number(
+		process.env.NDS_AUTOSAVE_INTERVAL_MS ?? DEFAULT_AUTOSAVE_INTERVAL_MS,
+	);
+	const autosaveSlot = Number(
+		process.env.NDS_AUTOSAVE_SLOT ?? DEFAULT_AUTOSAVE_SLOT,
+	);
+	const bridgeUrl = process.env.NDS_BRIDGE_URL ?? DEFAULT_BRIDGE_URL;
+	const autosaveTimer =
+		autosaveIntervalMs > 0
+			? setInterval(() => {
+					void saveStateToBridge(bridgeUrl, autosaveSlot)
+						.then(() => {
+							broadcastAction(
+								"screenshot",
+								`autosaved slot ${autosaveSlot}`,
+							);
+						})
+						.catch((error: unknown) => {
+							console.error(
+								"[senpi-dori-desmume] autosave failed:",
+								error instanceof Error ? error.message : error,
+							);
+						});
+				}, autosaveIntervalMs)
+			: undefined;
+
+	const shutdown = (): void => {
+		if (autosaveTimer !== undefined) {
+			clearInterval(autosaveTimer);
+		}
 		void server.stop();
-	});
-	process.once("SIGTERM", () => {
-		void server.stop();
-	});
+	};
+	process.once("SIGINT", shutdown);
+	process.once("SIGTERM", shutdown);
 }
