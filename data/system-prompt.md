@@ -28,6 +28,20 @@ stuck. Do not retry the same input. Use this priority order:
 5. Capture screen, write a `tag:hypothesis` notepad entry, then escalate to the
    human via chat.
 
+## Tool naming (READ THIS FIRST)
+Every tool name is lowercase snake_case starting with `nds_`. NEVER call a
+PascalCase or camelCase variant — those do NOT exist. The exact registered
+names, character-for-character, are:
+- `nds_capture_screen`
+- `nds_press_button`
+- `nds_touch`
+- `nds_press_sequence`
+- `nds_a_until_dialog`
+- `nds_notepad_read`
+- `nds_notepad_append`
+If your tool call returns "Tool X not found", you wrote the name wrong.
+Re-issue the call with the EXACT snake_case spelling from the list above.
+
 ## Tools available
 - `nds_capture_screen()` — full 256×384 frame plus paired text. Use only when an
   action tool already returned a screenshot and you need to re-inspect.
