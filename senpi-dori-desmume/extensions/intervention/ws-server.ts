@@ -1,3 +1,4 @@
+import { type Server, createServer } from "node:http";
 import type { ExtensionAPI } from "@code-yeongyu/senpi";
 import { Value } from "@sinclair/typebox/value";
 import { type WebSocket, WebSocketServer } from "ws";
@@ -25,14 +26,46 @@ interface AgentThinkingWire {
 	readonly text: string;
 }
 
-// Module-level handle to the running WSS so individual tool implementations
-// can shout into the web UI without having to thread the server reference
-// through every callsite. There's only ever ONE intervention server per
-// senpi process — see startInterventionServer below.
-let wssRef: WebSocketServer | undefined;
+interface InterventionServerState {
+	readonly wss: WebSocketServer;
+	readonly httpServer: Server;
+	readonly port: number;
+	readonly pi: Pick<ExtensionAPI, "sendUserMessage">;
+}
+
+declare global {
+	var __senpiDoriInterventionServerState: InterventionServerState | undefined;
+}
+
+function currentInterventionState(): InterventionServerState | undefined {
+	return globalThis.__senpiDoriInterventionServerState;
+}
+
+function setInterventionState(state: InterventionServerState): void {
+	globalThis.__senpiDoriInterventionServerState = state;
+}
+
+function clearInterventionState(state: InterventionServerState): void {
+	const currentState = currentInterventionState();
+	if (currentState?.wss === state.wss) {
+		globalThis.__senpiDoriInterventionServerState = undefined;
+	}
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function errorCode(error: unknown): string | undefined {
+	if (!isRecord(error)) {
+		return undefined;
+	}
+	const code = error.code;
+	return typeof code === "string" ? code : undefined;
+}
 
 function broadcastJson(message: AgentActionWire | AgentThinkingWire): void {
-	const server = wssRef;
+	const server = currentInterventionState()?.wss;
 	if (server === undefined) {
 		return;
 	}
@@ -92,8 +125,50 @@ export function startInterventionServer(
 	pi: Pick<ExtensionAPI, "sendUserMessage">,
 	port = 7979,
 ): InterventionServer {
-	const wss = new WebSocketServer({ port });
-	wssRef = wss;
+	const existingState = currentInterventionState();
+	if (existingState !== undefined) {
+		setInterventionState({ ...existingState, pi });
+		return {
+			port: existingState.port,
+			async stop() {
+				await stopInterventionServer(existingState);
+			},
+		};
+	}
+
+	const httpServer = createServer();
+	const wss = new WebSocketServer({ server: httpServer });
+	const state: InterventionServerState = { wss, httpServer, port, pi };
+
+	httpServer.on("error", (error) => {
+		if (errorCode(error) === "EADDRINUSE") {
+			clearInterventionState(state);
+			void stopWebSocketServer(state).catch((closeError: unknown) => {
+				console.error(
+					"[senpi-dori-desmume] failed to close busy intervention WS:",
+					closeError instanceof Error ? closeError.message : closeError,
+				);
+			});
+			return;
+		}
+		console.error(
+			"[senpi-dori-desmume] intervention HTTP server error:",
+			error instanceof Error ? error.message : error,
+		);
+	});
+	wss.on("error", (error) => {
+		console.error(
+			"[senpi-dori-desmume] intervention WS error:",
+			error instanceof Error ? error.message : error,
+		);
+	});
+	setInterventionState(state);
+	try {
+		httpServer.listen(port);
+	} catch (error) {
+		clearInterventionState(state);
+		throw error;
+	}
 
 	wss.on("connection", (sock) => {
 		sock.on("message", async (raw) => {
@@ -111,7 +186,12 @@ export function startInterventionServer(
 			}
 
 			try {
-				pi.sendUserMessage(parsed.text);
+				const currentPi = currentInterventionState()?.pi;
+				if (currentPi === undefined) {
+					sendError(sock, "injection failed: unavailable");
+					return;
+				}
+				currentPi.sendUserMessage(parsed.text);
 				const ack: ChatAck = { type: "ack", id: parsed.id };
 				sock.send(JSON.stringify(ack));
 			} catch (error) {
@@ -127,22 +207,49 @@ export function startInterventionServer(
 	return {
 		port,
 		async stop() {
-			for (const client of wss.clients) {
-				client.close();
-			}
-
-			await new Promise<void>((resolve, reject) => {
-				wss.close((error) => {
-					if (error !== undefined) {
-						reject(error);
-						return;
-					}
-					resolve();
-				});
-			});
-			if (wssRef === wss) {
-				wssRef = undefined;
-			}
+			await stopInterventionServer(state);
 		},
 	};
+}
+
+async function stopInterventionServer(
+	state: InterventionServerState,
+): Promise<void> {
+	const currentState = currentInterventionState();
+	if (currentState?.wss !== state.wss) {
+		return;
+	}
+	await stopWebSocketServer(state);
+	clearInterventionState(state);
+}
+
+async function stopWebSocketServer(
+	state: InterventionServerState,
+): Promise<void> {
+	for (const client of state.wss.clients) {
+		client.close();
+	}
+
+	await new Promise<void>((resolve, reject) => {
+		state.wss.close((error) => {
+			if (error !== undefined) {
+				reject(error);
+				return;
+			}
+			resolve();
+		});
+	});
+
+	await new Promise<void>((resolve, reject) => {
+		state.httpServer.close((error) => {
+			if (
+				error !== undefined &&
+				errorCode(error) !== "ERR_SERVER_NOT_RUNNING"
+			) {
+				reject(error);
+				return;
+			}
+			resolve();
+		});
+	});
 }

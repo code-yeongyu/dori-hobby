@@ -99,7 +99,14 @@ describe("batched tool output", () => {
 			const url = asText(input);
 			if (url.endsWith("/sequence")) {
 				expect(init?.method).toBe("POST");
-				return makeResponse({ ok: true });
+				return makeResponse({
+					ok: true,
+					aborted: false,
+					stepsExecuted: 3,
+					stepsRemaining: 0,
+					abortReason: null,
+					stuckStreak: 1,
+				});
 			}
 			if (url.endsWith("/screenshot")) {
 				return makeResponse({ image: "AAA", width: 256, height: 384 });
@@ -124,6 +131,14 @@ describe("batched tool output", () => {
 		);
 		expect(sequenceCall?.[1]?.body).toBe(JSON.stringify({ steps }));
 		expect(result.content).toHaveLength(2);
-		expect(result.details).toEqual({ steps: 3, screenshot: "post-action" });
+		expect(result.details).toEqual({
+			steps: 3,
+			aborted: false,
+			stepsExecuted: 3,
+			stepsRemaining: 0,
+			abortReason: null,
+			stuckStreak: 1,
+			screenshot: "post-action",
+		});
 	});
 });

@@ -10,11 +10,14 @@ interface ScreenshotResponse {
 
 type ContentBlock = TextContent | ImageContent;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
 }
 
-function readString(record: Record<string, unknown>, key: string): string {
+export function readString(
+	record: Record<string, unknown>,
+	key: string,
+): string {
 	const value = record[key];
 	if (typeof value !== "string") {
 		throw new Error(`bridge payload missing string field: ${key}`);
@@ -22,10 +25,24 @@ function readString(record: Record<string, unknown>, key: string): string {
 	return value;
 }
 
-function readNumber(record: Record<string, unknown>, key: string): number {
+export function readNumber(
+	record: Record<string, unknown>,
+	key: string,
+): number {
 	const value = record[key];
 	if (typeof value !== "number") {
 		throw new Error(`bridge payload missing number field: ${key}`);
+	}
+	return value;
+}
+
+export function readBoolean(
+	record: Record<string, unknown>,
+	key: string,
+): boolean {
+	const value = record[key];
+	if (typeof value !== "boolean") {
+		throw new Error(`bridge payload missing boolean field: ${key}`);
 	}
 	return value;
 }
@@ -70,7 +87,10 @@ export async function captureScreenshot(): Promise<{
 	};
 }
 
-export async function postJson(path: string, body: unknown): Promise<unknown> {
+export async function postJson(
+	path: string,
+	body: unknown,
+): Promise<Record<string, unknown>> {
 	const response = await fetch(`${BRIDGE_URL}${path}`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
@@ -79,5 +99,5 @@ export async function postJson(path: string, body: unknown): Promise<unknown> {
 	if (!response.ok) {
 		throw new Error(`bridge ${path} failed: ${response.status}`);
 	}
-	return response.json();
+	return await parseJsonObject(response);
 }

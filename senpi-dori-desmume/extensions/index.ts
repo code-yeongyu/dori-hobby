@@ -5,7 +5,10 @@ import {
 	startInterventionServer,
 } from "./intervention/ws-server.js";
 import {
+	aUntilDialogTool,
 	captureScreenTool,
+	notepadAppendTool,
+	notepadReadTool,
 	pressButtonTool,
 	pressSequenceTool,
 	touchTool,
@@ -31,7 +34,10 @@ async function saveStateToBridge(
 }
 
 export default async function extension(pi: ExtensionAPI): Promise<void> {
+	pi.registerTool(aUntilDialogTool);
 	pi.registerTool(captureScreenTool);
+	pi.registerTool(notepadReadTool);
+	pi.registerTool(notepadAppendTool);
 	pi.registerTool(pressButtonTool);
 	pi.registerTool(pressSequenceTool);
 	pi.registerTool(touchTool);
@@ -39,7 +45,7 @@ export default async function extension(pi: ExtensionAPI): Promise<void> {
 	const interventionPort = Number(process.env.INTERVENTION_PORT ?? 7979);
 	const server = startInterventionServer(pi, interventionPort);
 	console.log(
-		`[senpi-dori-desmume] registered 4 tools + intervention WS on :${server.port}`,
+		`[senpi-dori-desmume] registered 7 tools + intervention WS on :${server.port}`,
 	);
 
 	// Forward Dori's reasoning/text stream into the activity log. senpi
