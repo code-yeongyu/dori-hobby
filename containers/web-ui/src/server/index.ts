@@ -3,7 +3,6 @@ import { Hono } from "hono";
 import { createBunWebSocket, serveStatic } from "hono/bun";
 import type { ServerToClient } from "../shared/types.js";
 import { handleBunMessage, subscribeToUpstream } from "./chat-ws.js";
-import { playtimeProxy } from "./playtime-proxy.js";
 import { streamProxy } from "./stream-proxy.js";
 
 // `createBunWebSocket()` returns the `upgradeWebSocket` route helper
@@ -39,7 +38,6 @@ app.get("/health", (c) => {
 });
 
 app.route("/stream", streamProxy);
-app.route("/api", playtimeProxy);
 
 // Emulator health proxy: the browser can't reach :8787 directly (CORS +
 // container topology), so we expose a same-origin `/emulator/health` that
@@ -66,6 +64,27 @@ app.get("/emulator/health", async (c) => {
     return c.json({ status: "disconnected" });
   } catch {
     return c.json({ status: "disconnected" });
+  }
+});
+
+const emulatorPlaytimeUrl = (): string => {
+  const host = process.env.EMULATOR_HOST ?? "emulator";
+  const port = Number(process.env.EMULATOR_PORT ?? 8787);
+  return `http://${host}:${port}/playtime`;
+};
+
+app.get("/emulator/playtime", async (c) => {
+  try {
+    const response = await fetch(emulatorPlaytimeUrl(), {
+      signal: AbortSignal.timeout(1500),
+    });
+    const body = await response.arrayBuffer();
+    return new Response(body, {
+      status: response.status,
+      headers: response.headers,
+    });
+  } catch {
+    return c.json({ ok: false, error: "playtime unavailable" }, 503);
   }
 });
 

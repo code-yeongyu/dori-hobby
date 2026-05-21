@@ -19,7 +19,7 @@ export const StatusBar = ({
   status: SystemStatus;
 }): JSX.Element => {
   const playtimeValue =
-    playtimeSeconds === undefined ? "syncing" : formatPlaytime(playtimeSeconds);
+    playtimeSeconds === undefined ? "--" : formatPlaytime(playtimeSeconds);
   return (
     <div className="status-bar" role="status" aria-live="polite">
       <Pill label="Emulator" value={status.emulator} />

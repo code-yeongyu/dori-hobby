@@ -105,7 +105,7 @@ export const App = (): JSX.Element => {
     let cancelled = false;
     const tick = async (): Promise<void> => {
       try {
-        const response = await fetch("/api/playtime", {
+        const response = await fetch("/emulator/playtime", {
           signal: AbortSignal.timeout(2000),
         });
         if (cancelled) {
@@ -129,7 +129,7 @@ export const App = (): JSX.Element => {
       }
     };
     void tick();
-    const interval = window.setInterval(tick, 10_000);
+    const interval = window.setInterval(tick, 15_000);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
