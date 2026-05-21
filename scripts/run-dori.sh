@@ -19,7 +19,7 @@
 # Env:
 #   DORI_MODEL      same as --model
 #   DORI_PROVIDER   senpi provider name (default: openrouter)
-#   DORI_TOOLS      comma-separated tool allowlist (default: the 4 nds_ tools)
+#   DORI_TOOLS      comma-separated tool allowlist (default: the 7 nds_ tools)
 #   DORI_ANTHROPIC_COMPUTER_USE_BETA  documented native Anthropic beta string
 #   DORI_OPENAI_COMPUTER_USE_MODEL     documented OpenAI Responses computer-use model
 #
@@ -34,15 +34,16 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SESSION_DIR="${REPO_ROOT}/.dori-sessions"
 EXTENSION_PATH="${REPO_ROOT}/senpi-dori-desmume/extensions/index.ts"
 SYSTEM_PROMPT_PATH="${REPO_ROOT}/data/system-prompt.md"
-PROVIDER="${DORI_PROVIDER:-openrouter}"
-# Default: claude-opus-4-7 with max-tier thinking. The senpi model pattern
-# supports a ":<thinking>" suffix so "anthropic/claude-opus-4-7:max"
-# requests the highest reasoning depth the provider exposes. Pokemon
-# White's intro/Juniper trigger logic + Striaton type-counter strategy is
-# easier with deeper search per turn.
-MODEL="${DORI_MODEL:-anthropic/claude-opus-4-7:max}"
+PROVIDER="${DORI_PROVIDER:-anthropic}"
+# Default: claude-opus-4-7 with max thinking via the user's local
+# anthropic-compatible gateway (configured in ~/.senpi/agent/auth.json:
+# base_url=https://ccapi.labs.mengmota.com/anthropic, key=sk-yeongyu-*).
+# Senpi's anthropic provider uses native model ids with DASHES
+# (claude-opus-4-7), NOT OpenRouter's dot form. The OpenRouter catalog
+# does not host opus-4.7 yet, so we route directly through ccapi.
+MODEL="${DORI_MODEL:-claude-opus-4-7}"
 THINKING="${DORI_THINKING:-max}"
-TOOLS="${DORI_TOOLS:-nds_capture_screen,nds_press_button,nds_touch,nds_press_sequence}"
+TOOLS="${DORI_TOOLS:-nds_capture_screen,nds_press_button,nds_touch,nds_press_sequence,nds_a_until_dialog,nds_notepad_read,nds_notepad_append}"
 ANTHROPIC_COMPUTER_USE_BETA="${DORI_ANTHROPIC_COMPUTER_USE_BETA:-computer-use-2025-11-24}"
 OPENAI_COMPUTER_USE_MODEL="${DORI_OPENAI_COMPUTER_USE_MODEL:-gpt-5.4}"
 
