@@ -56,9 +56,10 @@ export async function captureScreenshot(): Promise<{
 		height: readNumber(payload, "height"),
 	};
 
-	const topMaxY = Math.floor(raw.height / 2) - 1;
 	const bottomMinY = Math.floor(raw.height / 2);
-	const text = `Screenshot ${raw.width}x${raw.height}. Top screen at y=0..${topMaxY}, bottom (touch) screen at y=${bottomMinY}..${raw.height - 1}.`;
+	const topMaxY = bottomMinY - 1;
+	const bottomMaxY = raw.height - 1;
+	const text = `Screenshot ${raw.width}x${raw.height} (full DS frame). Top screen (view-only): y=0..${topMaxY}. Bottom screen (TOUCH-CAPABLE): y=${bottomMinY}..${bottomMaxY} in the image; touch_y = image_y - ${bottomMinY}. Only the bottom screen accepts touch input — top screen is view-only.`;
 
 	return {
 		raw,

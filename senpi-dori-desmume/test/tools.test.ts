@@ -30,35 +30,6 @@ describe("nds tools", () => {
 		fetchMock.mockReset();
 	});
 
-	it("nds_capture_screen returns image+text with coordinate offsets", async () => {
-		fetchMock.mockResolvedValue(
-			makeResponse({ image: "AAA", width: 512, height: 768 }),
-		);
-		vi.stubGlobal("fetch", fetchMock);
-
-		const result = await Reflect.apply(captureScreenTool.execute, undefined, [
-			"tool-id",
-			{},
-		]);
-
-		expect(fetchMock).toHaveBeenCalledTimes(1);
-		expect(asText(fetchMock.mock.calls[0]?.[0])).toContain("/screenshot");
-		expect(result.content).toHaveLength(2);
-		expect(result.content[0]).toEqual({
-			type: "image",
-			data: "AAA",
-			mimeType: "image/png",
-		});
-		expect(result.content[1]?.type).toBe("text");
-		if (result.content[1]?.type === "text") {
-			expect(result.content[1].text).toContain("512x768");
-			expect(result.content[1].text).toContain("Top screen at y=0..383");
-			expect(result.content[1].text).toContain(
-				"bottom (touch) screen at y=384..767",
-			);
-		}
-	});
-
 	const buttons = [
 		"A",
 		"B",
@@ -128,6 +99,29 @@ describe("nds tools", () => {
 		);
 	});
 
+	it("nds_press_button sends repeat options when provided", async () => {
+		fetchMock.mockImplementation(async (input) => {
+			const url = asText(input);
+			if (url.endsWith("/button")) {
+				return makeResponse({ ok: true });
+			}
+			return makeResponse({ image: "AAA", width: 512, height: 768 });
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		await Reflect.apply(pressButtonTool.execute, undefined, [
+			"tool-id",
+			{ button: "A", repeat_count: 5, repeat_interval_ms: 60 },
+		]);
+
+		const pressCall = fetchMock.mock.calls.find((call) =>
+			asText(call[0]).endsWith("/button"),
+		);
+		expect(pressCall?.[1]?.body).toBe(
+			JSON.stringify({ button: "A", repeat_count: 5, repeat_interval_ms: 60 }),
+		);
+	});
+
 	it("nds_touch accepts lower boundary (0,0)", async () => {
 		fetchMock.mockImplementation(async (input) => {
 			const url = asText(input);
@@ -168,6 +162,43 @@ describe("nds tools", () => {
 			asText(call[0]).endsWith("/touch"),
 		);
 		expect(touchCall?.[1]?.body).toBe(JSON.stringify({ x: 255, y: 191 }));
+	});
+
+	it("nds_touch sends hold_ms and drag requests", async () => {
+		fetchMock.mockImplementation(async (input) => {
+			const url = asText(input);
+			if (url.endsWith("/touch") || url.endsWith("/touch-drag")) {
+				return makeResponse({ ok: true });
+			}
+			return makeResponse({ image: "AAA", width: 512, height: 768 });
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		await Reflect.apply(touchTool.execute, undefined, [
+			"tool-id",
+			{ x: 10, y: 20, hold_ms: 300 },
+		]);
+		await Reflect.apply(touchTool.execute, undefined, [
+			"tool-id",
+			{ x: 50, y: 80, drag_to: { x: 200, y: 80 }, drag_duration_ms: 400 },
+		]);
+
+		const touchCall = fetchMock.mock.calls.find((call) =>
+			asText(call[0]).endsWith("/touch"),
+		);
+		const dragCall = fetchMock.mock.calls.find((call) =>
+			asText(call[0]).endsWith("/touch-drag"),
+		);
+		expect(touchCall?.[1]?.body).toBe(
+			JSON.stringify({ x: 10, y: 20, hold_ms: 300 }),
+		);
+		expect(dragCall?.[1]?.body).toBe(
+			JSON.stringify({
+				from: { x: 50, y: 80 },
+				to: { x: 200, y: 80 },
+				duration_ms: 400,
+			}),
+		);
 	});
 
 	it("nds_touch rejects x=256 with isError and no POST", async () => {

@@ -7,6 +7,7 @@ import {
 import {
 	captureScreenTool,
 	pressButtonTool,
+	pressSequenceTool,
 	touchTool,
 } from "./tools/index.js";
 
@@ -14,7 +15,10 @@ const DEFAULT_AUTOSAVE_INTERVAL_MS = 60_000;
 const DEFAULT_AUTOSAVE_SLOT = 1;
 const DEFAULT_BRIDGE_URL = "http://localhost:7878";
 
-async function saveStateToBridge(bridgeUrl: string, slot: number): Promise<void> {
+async function saveStateToBridge(
+	bridgeUrl: string,
+	slot: number,
+): Promise<void> {
 	const response = await fetch(`${bridgeUrl}/save-state`, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
@@ -29,12 +33,13 @@ async function saveStateToBridge(bridgeUrl: string, slot: number): Promise<void>
 export default async function extension(pi: ExtensionAPI): Promise<void> {
 	pi.registerTool(captureScreenTool);
 	pi.registerTool(pressButtonTool);
+	pi.registerTool(pressSequenceTool);
 	pi.registerTool(touchTool);
 
 	const interventionPort = Number(process.env.INTERVENTION_PORT ?? 7979);
 	const server = startInterventionServer(pi, interventionPort);
 	console.log(
-		`[senpi-dori-desmume] registered 3 tools + intervention WS on :${server.port}`,
+		`[senpi-dori-desmume] registered 4 tools + intervention WS on :${server.port}`,
 	);
 
 	// Forward Dori's reasoning/text stream into the activity log. senpi
@@ -78,10 +83,7 @@ export default async function extension(pi: ExtensionAPI): Promise<void> {
 			? setInterval(() => {
 					void saveStateToBridge(bridgeUrl, autosaveSlot)
 						.then(() => {
-							broadcastAction(
-								"screenshot",
-								`autosaved slot ${autosaveSlot}`,
-							);
+							broadcastAction("screenshot", `autosaved slot ${autosaveSlot}`);
 						})
 						.catch((error: unknown) => {
 							console.error(
