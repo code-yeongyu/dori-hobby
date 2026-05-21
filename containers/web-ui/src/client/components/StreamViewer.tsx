@@ -44,6 +44,17 @@ export const StreamViewer = ({
     let currentClient: ReturnType<typeof createWhepClient> | undefined;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let attempt = 0;
+    // Generation counter — every new tryConnect bumps it. Stale clients'
+    // late onState callbacks (e.g. the synchronous onState("disconnected")
+    // fired from close() during teardown) check their captured gen and
+    // bail. Without this we got a fatal feedback loop: teardown of the
+    // old client during replacement would fire "disconnected" → schedule
+    // a reconnect timer → the NEW connection succeeds and we transition
+    // to "live" → but the stale reconnect timer was never cleared, so
+    // 1s later it fires, tears down the live peer, and the cycle repeats
+    // every second. Visible in mediamtx logs as a tight stream of
+    // "session X established / closed / created" log lines.
+    let generation = 0;
 
     const clearReconnectTimer = (): void => {
       if (reconnectTimer !== undefined) {
@@ -59,49 +70,58 @@ export const StreamViewer = ({
       }
     };
 
-    const handleState = (next: StreamState): void => {
-      if (stopped) {
-        return;
-      }
-      setState(next);
-      onStreamStatus(next);
-      if (next === "live") {
-        attempt = 0;
-        return;
-      }
-      if (next === "disconnected") {
-        scheduleReconnect();
-      }
-    };
-
-    const tryConnect = async (url: string): Promise<boolean> => {
-      if (stopped) {
-        return false;
-      }
-      teardownClient();
-      const client = createWhepClient({ url, videoEl: video, onState: handleState });
-      currentClient = client;
-      try {
-        await client.connect();
-        return !stopped;
-      } catch {
-        return false;
-      }
-    };
-
     const scheduleReconnect = (): void => {
       if (stopped || reconnectTimer !== undefined) {
         return;
       }
-      // 1s, 2s, 4s, 8s, then stay at 8s. Connectivity blips usually
-      // clear inside two cycles; longer outages keep retrying at 8s so
-      // the page heals itself the moment mediamtx becomes reachable.
+      // 1s, 2s, 4s, 8s, then stay at 8s.
       const delay = Math.min(1000 * 2 ** attempt, 8000);
       attempt += 1;
       reconnectTimer = setTimeout(() => {
         reconnectTimer = undefined;
         void runConnectChain();
       }, delay);
+    };
+
+    const tryConnect = async (url: string): Promise<boolean> => {
+      if (stopped) {
+        return false;
+      }
+      generation += 1;
+      const myGen = generation;
+      teardownClient();
+      const client = createWhepClient({
+        url,
+        videoEl: video,
+        onState: (next) => {
+          // Ignore late events from a generation we already moved past
+          // (the old client may still emit "disconnected" asynchronously
+          // when its RTCPeerConnection finishes closing).
+          if (stopped || myGen !== generation) {
+            return;
+          }
+          setState(next);
+          onStreamStatus(next);
+          if (next === "live") {
+            attempt = 0;
+            // CRITICAL: clear any pending reconnect timer that was
+            // scheduled by the teardown-fired "disconnected" — otherwise
+            // it tears the brand-new live connection down 1s later.
+            clearReconnectTimer();
+            return;
+          }
+          if (next === "disconnected") {
+            scheduleReconnect();
+          }
+        },
+      });
+      currentClient = client;
+      try {
+        await client.connect();
+        return !stopped && myGen === generation;
+      } catch {
+        return false;
+      }
     };
 
     const runConnectChain = async (): Promise<void> => {
