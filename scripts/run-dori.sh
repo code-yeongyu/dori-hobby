@@ -19,7 +19,9 @@
 # Env:
 #   DORI_MODEL      same as --model
 #   DORI_PROVIDER   senpi provider name (default: openrouter)
-#   DORI_TOOLS      comma-separated tool allowlist (default: the 3 nds_ tools)
+#   DORI_TOOLS      comma-separated tool allowlist (default: the 4 nds_ tools)
+#   DORI_ANTHROPIC_COMPUTER_USE_BETA  documented native Anthropic beta string
+#   DORI_OPENAI_COMPUTER_USE_MODEL     documented OpenAI Responses computer-use model
 #
 # Usage:
 #   ./scripts/run-dori.sh                      # resume last session, loop
@@ -34,7 +36,12 @@ EXTENSION_PATH="${REPO_ROOT}/senpi-dori-desmume/extensions/index.ts"
 SYSTEM_PROMPT_PATH="${REPO_ROOT}/data/system-prompt.md"
 PROVIDER="${DORI_PROVIDER:-openrouter}"
 MODEL="${DORI_MODEL:-anthropic/claude-sonnet-4.6}"
-TOOLS="${DORI_TOOLS:-nds_capture_screen,nds_press_button,nds_touch}"
+TOOLS="${DORI_TOOLS:-nds_capture_screen,nds_press_button,nds_touch,nds_press_sequence}"
+ANTHROPIC_COMPUTER_USE_BETA="${DORI_ANTHROPIC_COMPUTER_USE_BETA:-computer-use-2025-11-24}"
+OPENAI_COMPUTER_USE_MODEL="${DORI_OPENAI_COMPUTER_USE_MODEL:-gpt-5.4}"
+
+export DORI_ANTHROPIC_COMPUTER_USE_BETA="${ANTHROPIC_COMPUTER_USE_BETA}"
+export DORI_OPENAI_COMPUTER_USE_MODEL="${OPENAI_COMPUTER_USE_MODEL}"
 
 FRESH=0
 LOOP=1
@@ -48,6 +55,23 @@ while [[ $# -gt 0 ]]; do
 done
 
 mkdir -p "${SESSION_DIR}"
+
+case "${PROVIDER}" in
+	anthropic)
+		echo "[run-dori] Anthropic native computer-use beta documented: ${ANTHROPIC_COMPUTER_USE_BETA}"
+		echo "[run-dori] senpi exposes request mutation via extensions; no safe native computer tool is registered by this NDS extension."
+		;;
+	openai|openai-responses)
+		echo "[run-dori] OpenAI computer-use requires Responses API model/tool: ${OPENAI_COMPUTER_USE_MODEL} + computer tool."
+		echo "[run-dori] this NDS extension uses senpi tools, not provider-native OpenAI computer actions."
+		;;
+	openrouter)
+		echo "[run-dori] OpenRouter does not passthrough Anthropic computer-use beta headers/tool types; using in-context computer-use priming."
+		;;
+	*)
+		echo "[run-dori] provider ${PROVIDER}: no verified native computer-use passthrough; using in-context computer-use priming."
+		;;
+esac
 
 CONTINUE_FLAG="--continue"
 if [[ "${FRESH}" -eq 1 ]]; then
