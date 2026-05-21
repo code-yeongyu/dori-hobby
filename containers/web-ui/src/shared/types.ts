@@ -59,12 +59,24 @@ export const AgentThinkingSchema = Type.Object({
   text: Type.String({ maxLength: 4000 }),
 });
 
+// Authoritative idle/running pulse sourced from senpi's pi.on("agent_start")
+// and pi.on("agent_end"). Used so the StatusBar can transition the Agent
+// pill back from "running" → "idle" when Dori actually stops — the previous
+// client-side heuristic never made that transition.
+export const AgentStatusSchema = Type.Object({
+  type: Type.Literal("agent-status"),
+  id: Type.String({ minLength: 1, maxLength: 128 }),
+  timestamp: Type.Number(),
+  state: Type.Union([Type.Literal("running"), Type.Literal("idle")]),
+});
+
 export const ServerToClientSchema = Type.Union([
   ChatAckSchema,
   ChatErrorSchema,
   SystemStatusSchema,
   AgentActionSchema,
   AgentThinkingSchema,
+  AgentStatusSchema,
 ]);
 
 export type ChatMessage = Static<typeof ChatMessageSchema>;
@@ -73,4 +85,5 @@ export type ChatError = Static<typeof ChatErrorSchema>;
 export type SystemStatus = Static<typeof SystemStatusSchema>;
 export type AgentAction = Static<typeof AgentActionSchema>;
 export type AgentThinking = Static<typeof AgentThinkingSchema>;
+export type AgentStatus = Static<typeof AgentStatusSchema>;
 export type ServerToClient = Static<typeof ServerToClientSchema>;

@@ -6,6 +6,7 @@ import WSClient, {
 } from "ws";
 import {
   AgentActionSchema,
+  AgentStatusSchema,
   AgentThinkingSchema,
   type ChatMessage,
   ChatMessageSchema,
@@ -57,6 +58,10 @@ const handleUpstreamMessage = (raw: string): void => {
     return;
   }
   if (Value.Check(AgentThinkingSchema, parsed)) {
+    broadcast(parsed);
+    return;
+  }
+  if (Value.Check(AgentStatusSchema, parsed)) {
     broadcast(parsed);
   }
 };

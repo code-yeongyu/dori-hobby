@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@code-yeongyu/senpi";
 import {
 	broadcastAction,
+	broadcastAgentStatus,
 	broadcastThinking,
 	startInterventionServer,
 } from "./intervention/ws-server.js";
@@ -18,6 +19,9 @@ import {
 const DEFAULT_AUTOSAVE_INTERVAL_MS = 60_000;
 const DEFAULT_AUTOSAVE_SLOT = 1;
 const DEFAULT_BRIDGE_URL = "http://localhost:8787";
+const DEFAULT_IDLE_NUDGE_MS = 45_000;
+const IDLE_NUDGE_TEXT =
+	"AUTOMATED NUDGE: you went idle. Your goal is to play Pokemon White and progress the story toward the Striaton Trio Badge. Take the next action NOW: capture screen, read notepad, then move forward with nds_press_sequence or nds_advance_dialog. Do not stop again.";
 
 async function saveStateToBridge(
 	bridgeUrl: string,
@@ -102,10 +106,65 @@ export default async function extension(pi: ExtensionAPI): Promise<void> {
 				}, autosaveIntervalMs)
 			: undefined;
 
+	// Auto-nudge when Dori goes idle.
+	//
+	// senpi emits `agent_start` when an agent loop kicks off and `agent_end`
+	// when the loop finishes and the system waits for the next user message.
+	// That `agent_end` is the authoritative "truly idle" signal — unlike the
+	// previous client-side heuristic where the status pill never transitioned
+	// back from "running" to "idle", here we know the agent IS idle.
+	//
+	// Strategy: on `agent_end`, schedule a single-shot timer at
+	// IDLE_NUDGE_TIMEOUT_MS. If the timer fires without `agent_start`
+	// interrupting it, fire a steering nudge that reminds Dori of the goal.
+	// `deliverAs: "steer"` is harmless when idle (nothing to interrupt) and
+	// is the same code path the human chat panel uses, so we get the same
+	// reliability guarantees.
+	const idleNudgeMs = Number(
+		process.env.IDLE_NUDGE_TIMEOUT_MS ?? DEFAULT_IDLE_NUDGE_MS,
+	);
+	let idleTimer: ReturnType<typeof setTimeout> | undefined;
+
+	const clearIdleTimer = (): void => {
+		if (idleTimer !== undefined) {
+			clearTimeout(idleTimer);
+			idleTimer = undefined;
+		}
+	};
+
+	pi.on("agent_start", () => {
+		clearIdleTimer();
+		broadcastAgentStatus("running");
+	});
+
+	pi.on("agent_end", () => {
+		clearIdleTimer();
+		broadcastAgentStatus("idle");
+		if (idleNudgeMs <= 0) {
+			return;
+		}
+		idleTimer = setTimeout(() => {
+			idleTimer = undefined;
+			broadcastAction(
+				"screenshot",
+				`auto-nudge (idle ${Math.round(idleNudgeMs / 1000)}s)`,
+			);
+			try {
+				pi.sendUserMessage(IDLE_NUDGE_TEXT, { deliverAs: "steer" });
+			} catch (error: unknown) {
+				console.error(
+					"[senpi-dori-desmume] idle nudge failed:",
+					error instanceof Error ? error.message : error,
+				);
+			}
+		}, idleNudgeMs);
+	});
+
 	const shutdown = (): void => {
 		if (autosaveTimer !== undefined) {
 			clearInterval(autosaveTimer);
 		}
+		clearIdleTimer();
 		void server.stop();
 	};
 	process.once("SIGINT", shutdown);

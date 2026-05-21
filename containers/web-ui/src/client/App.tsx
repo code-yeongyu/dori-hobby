@@ -240,5 +240,10 @@ const handleMessage = (
   if (message.type === "agent-action" || message.type === "agent-thinking") {
     setActivity((previous) => [...previous.slice(-499), message]);
     setStatus((previous) => ({ ...previous, agent: "running" }));
+    return;
+  }
+
+  if (message.type === "agent-status") {
+    setStatus((previous) => ({ ...previous, agent: message.state }));
   }
 };

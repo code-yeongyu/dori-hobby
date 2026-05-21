@@ -26,6 +26,15 @@ interface AgentThinkingWire {
 	readonly text: string;
 }
 
+export type AgentRunState = "running" | "idle";
+
+interface AgentStatusWire {
+	readonly type: "agent-status";
+	readonly id: string;
+	readonly timestamp: number;
+	readonly state: AgentRunState;
+}
+
 interface InterventionServerState {
 	readonly wss: WebSocketServer;
 	readonly httpServer: Server;
@@ -64,7 +73,9 @@ function errorCode(error: unknown): string | undefined {
 	return typeof code === "string" ? code : undefined;
 }
 
-function broadcastJson(message: AgentActionWire | AgentThinkingWire): void {
+function broadcastJson(
+	message: AgentActionWire | AgentThinkingWire | AgentStatusWire,
+): void {
 	const server = currentInterventionState()?.wss;
 	if (server === undefined) {
 		return;
@@ -113,6 +124,19 @@ export function broadcastThinking(text: string): void {
 		id: newId(),
 		timestamp: Date.now(),
 		text: text.length > 1000 ? `${text.slice(0, 997)}...` : text,
+	});
+}
+
+// Public API: emits {type:"agent-status",state} so the web-ui StatusBar
+// can transition the pill between "running" and "idle". Wired to
+// pi.on("agent_start" / "agent_end") in extensions/index.ts — these are
+// the only authoritative idle signals senpi exposes.
+export function broadcastAgentStatus(state: AgentRunState): void {
+	broadcastJson({
+		type: "agent-status",
+		id: newId(),
+		timestamp: Date.now(),
+		state,
 	});
 }
 

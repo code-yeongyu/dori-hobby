@@ -100,6 +100,20 @@ const parseServerMessage = (raw: string): ServerToClient | undefined => {
     };
   }
 
+  if (
+    typeValue === "agent-status" &&
+    typeof candidate.id === "string" &&
+    typeof candidate.timestamp === "number" &&
+    (candidate.state === "running" || candidate.state === "idle")
+  ) {
+    return {
+      type: "agent-status",
+      id: candidate.id,
+      timestamp: candidate.timestamp,
+      state: candidate.state,
+    };
+  }
+
   return undefined;
 };
 
