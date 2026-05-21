@@ -193,12 +193,12 @@ describe("playtime tracker", () => {
 			},
 		});
 
-		expect(ticks).toHaveLength(1);
+		expect(ticks).toHaveLength(0);
 		await vi.advanceTimersByTimeAsync(90_000);
-		expect(ticks).toHaveLength(4);
+		expect(ticks).toHaveLength(3);
 		abortController.abort();
 		await vi.advanceTimersByTimeAsync(30_000);
-		expect(ticks).toHaveLength(4);
+		expect(ticks).toHaveLength(3);
 	});
 
 	it("formats detailed playtime with padded minutes and seconds", () => {

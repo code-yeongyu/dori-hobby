@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { type CommandRunner, DesmumeWindowController, defaultSleep, type SleepFunction } from "./desmume-window.js";
 import {
 	assertIntegerInRange,
@@ -85,7 +86,7 @@ const hasMovementIntent = (step: SequenceStep): boolean => {
 // Dialog stability needs exact full-frame equality; collision detection uses a
 // low-resolution fingerprint so tiny sprite animation does not hide wall bumps.
 const fingerprintScreenshot = (base64: string): string => {
-	return new Bun.CryptoHasher("sha1").update(base64).digest("hex");
+	return createHash("sha1").update(base64).digest("hex");
 };
 
 const nextStableStreak = (hash: string, lastHash: string | undefined, currentStreak: number): number => {

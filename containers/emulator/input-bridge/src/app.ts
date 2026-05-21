@@ -35,6 +35,13 @@ const nullPlaytime: PlaytimeSnapshotProvider = {
 	async snapshot() {
 		return { total_seconds: 0, last_tick_epoch_ms: 0, started_at_ms: 0 };
 	},
+	async snapshotLive() {
+		return {
+			totalSeconds: 0,
+			totalHuman: "0h 00m 00s",
+			startedAtIso: new Date(0).toISOString(),
+		};
+	},
 	async recordEvent(event: string) {
 		return { event, at_iso: new Date(0).toISOString(), total_seconds: 0 };
 	},

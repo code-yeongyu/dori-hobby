@@ -2,10 +2,11 @@ import { type Static, Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { Hono } from "hono";
 
-import { formatPlaytimeDetailed, type PlaytimeEvent, type PlaytimeState, Seconds } from "./playtime-tracker.js";
+import type { PlaytimeEvent, PlaytimeLiveSnapshot, PlaytimeState } from "./playtime-tracker.js";
 
 export interface PlaytimeRouteService {
 	snapshot(): Promise<PlaytimeState>;
+	snapshotLive(): Promise<PlaytimeLiveSnapshot>;
 	recordEvent(event: string): Promise<PlaytimeEvent>;
 }
 
@@ -38,15 +39,16 @@ export const buildPlaytimeRoutes = (service: PlaytimeRouteService): Hono => {
 
 	app.get("/playtime", async (context) => {
 		try {
-			const snapshot = await service.snapshot();
+			const snapshot = await service.snapshotLive();
 			return context.json({
-				total_seconds: snapshot.total_seconds,
-				formatted: formatPlaytimeDetailed(Seconds.from(snapshot.total_seconds)),
-				started_at_ms: snapshot.started_at_ms,
-				last_tick_epoch_ms: snapshot.last_tick_epoch_ms,
+				ok: true,
+				total_seconds: snapshot.totalSeconds,
+				total_human: snapshot.totalHuman,
+				started_at: snapshot.startedAtIso,
+				ticking: true,
 			});
 		} catch (error) {
-			return context.json({ error: toErrorMessage(error) }, 500);
+			return context.json({ ok: false, error: toErrorMessage(error) }, 500);
 		}
 	});
 

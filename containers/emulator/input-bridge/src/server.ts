@@ -52,6 +52,7 @@ if (import.meta.main) {
 		eventsPath: "/root/.config/desmume/playtime-events.json",
 		tickIntervalMs,
 	});
+	await playtime.startSession();
 	const playtimeAbort = new AbortController();
 	if (process.env.NODE_ENV !== "test" && process.env.PLAYTIME_DISABLE_TICK !== "1") {
 		startPlaytimeTickLoop({

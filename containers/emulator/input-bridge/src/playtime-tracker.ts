@@ -83,6 +83,12 @@ export type PlaytimeTrackerOptions = {
 	readonly tickIntervalMs: TickMilliseconds;
 };
 
+export type PlaytimeLiveSnapshot = {
+	readonly totalSeconds: number;
+	readonly totalHuman: string;
+	readonly startedAtIso: string;
+};
+
 export type PlaytimeTickLoopOptions = {
 	readonly signal: AbortSignal;
 	readonly tickIntervalMs: TickMilliseconds;
@@ -210,6 +216,30 @@ export class PlaytimeTracker {
 		return state;
 	}
 
+	public async startSession(): Promise<PlaytimeState> {
+		const now = this.options.clock();
+		const saved = await readPlaytimeState(this.options.statePath);
+		const next: PlaytimeState = {
+			total_seconds: saved?.total_seconds ?? 0,
+			last_tick_epoch_ms: now.value,
+			started_at_ms: saved?.started_at_ms ?? now.value,
+		};
+		await writePlaytimeState(this.options.statePath, next);
+		return next;
+	}
+
+	public async snapshotLive(): Promise<PlaytimeLiveSnapshot> {
+		const state = await this.snapshot();
+		const now = this.options.clock();
+		const elapsedSeconds = Seconds.from(Math.max(0, Math.floor((now.value - state.last_tick_epoch_ms) / 1000))).value;
+		const totalSeconds = state.total_seconds + elapsedSeconds;
+		return {
+			totalSeconds,
+			totalHuman: formatPlaytimeDetailed(Seconds.from(totalSeconds)),
+			startedAtIso: new Date(now.value - totalSeconds * 1000).toISOString(),
+		};
+	}
+
 	public async tick(): Promise<PlaytimeState> {
 		return await this.tickAt(this.options.clock());
 	}
@@ -240,7 +270,6 @@ export const startPlaytimeTickLoop = ({ signal, tick, tickIntervalMs }: Playtime
 			console.error(`[playtime] tick failed: ${message}`);
 		});
 	};
-	runTick();
 	const interval = setInterval(runTick, tickIntervalMs.value);
 	const stop = (): void => {
 		clearInterval(interval);
