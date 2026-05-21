@@ -101,3 +101,11 @@ export async function postJson(
 	}
 	return await parseJsonObject(response);
 }
+
+export async function getJson(path: string): Promise<Record<string, unknown>> {
+	const response = await fetch(`${BRIDGE_URL}${path}`);
+	if (!response.ok) {
+		throw new Error(`bridge ${path} failed: ${response.status}`);
+	}
+	return await parseJsonObject(response);
+}

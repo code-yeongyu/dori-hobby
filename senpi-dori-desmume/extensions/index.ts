@@ -8,6 +8,7 @@ import {
 import {
 	aUntilDialogTool,
 	captureScreenTool,
+	ndsPlaytimeTool,
 	notepadAppendTool,
 	notepadReadTool,
 	pressButtonTool,
@@ -104,13 +105,14 @@ export default async function extension(pi: ExtensionAPI): Promise<void> {
 	pi.registerTool(notepadAppendTool);
 	pi.registerTool(pressButtonTool);
 	pi.registerTool(pressSequenceTool);
+	pi.registerTool(ndsPlaytimeTool);
 	pi.registerTool(recordEventTool);
 	pi.registerTool(touchTool);
 
 	const interventionPort = Number(process.env.INTERVENTION_PORT ?? 7979);
 	const server = startInterventionServer(pi, interventionPort);
 	console.log(
-		`[senpi-dori-desmume] registered 8 tools + intervention WS on :${server.port}`,
+		`[senpi-dori-desmume] registered 9 tools + intervention WS on :${server.port}`,
 	);
 
 	// Forward Dori's reasoning/text stream into the activity log. senpi
