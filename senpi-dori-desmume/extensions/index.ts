@@ -6,6 +6,7 @@ import {
 } from "./intervention/ws-server.js";
 import {
 	aUntilDialogTool,
+	aUntilDialogToolAlias,
 	captureScreenTool,
 	notepadAppendTool,
 	notepadReadTool,
@@ -35,6 +36,10 @@ async function saveStateToBridge(
 
 export default async function extension(pi: ExtensionAPI): Promise<void> {
 	pi.registerTool(aUntilDialogTool);
+	// Opus 4-7 consistently hallucinates PascalCase tool names; we register
+	// the same tool under the PascalCase alias so the hallucinated calls
+	// still land. Both routes invoke the same backend handler.
+	pi.registerTool(aUntilDialogToolAlias);
 	pi.registerTool(captureScreenTool);
 	pi.registerTool(notepadReadTool);
 	pi.registerTool(notepadAppendTool);
@@ -45,7 +50,7 @@ export default async function extension(pi: ExtensionAPI): Promise<void> {
 	const interventionPort = Number(process.env.INTERVENTION_PORT ?? 7979);
 	const server = startInterventionServer(pi, interventionPort);
 	console.log(
-		`[senpi-dori-desmume] registered 7 tools + intervention WS on :${server.port}`,
+		`[senpi-dori-desmume] registered 8 tools + intervention WS on :${server.port}`,
 	);
 
 	// Forward Dori's reasoning/text stream into the activity log. senpi
